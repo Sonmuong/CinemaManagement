@@ -8,6 +8,15 @@
         <servlet-name>CustomerServlet</servlet-name>
         <servlet-class>servlet.CustomerServlet</servlet-class>
     </servlet>
+    <servlet>
+        <servlet-name>ShowtimeServlet</servlet-name>
+        <servlet-class>servlet.ShowtimeServlet</servlet-class>
+    </servlet>
+    <servlet>
+        <servlet-name>TicketServlet</servlet-name>
+        <servlet-class>servlet.TicketServlet</servlet-class>
+    </servlet>
+    
     <servlet-mapping>
         <servlet-name>MovieServlet</servlet-name>
         <url-pattern>/MovieServlet</url-pattern>
@@ -15,5 +24,21 @@
     <servlet-mapping>
         <servlet-name>CustomerServlet</servlet-name>
         <url-pattern>/CustomerServlet</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>MovieServlet</servlet-name>
+        <url-pattern>/movies</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>CustomerServlet</servlet-name>
+        <url-pattern>/customers</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>ShowtimeServlet</servlet-name>
+        <url-pattern>/showtimes</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>TicketServlet</servlet-name>
+        <url-pattern>/tickets</url-pattern>
     </servlet-mapping>
 </web-app>

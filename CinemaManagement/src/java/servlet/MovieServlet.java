@@ -8,7 +8,6 @@ import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.util.List;
 
-@WebServlet("/movies")
 public class MovieServlet extends HttpServlet {
     private MovieDAO movieDAO = new MovieDAO();
     
