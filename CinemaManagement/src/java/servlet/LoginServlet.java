@@ -6,7 +6,6 @@ import java.io.IOException;
 
 public class LoginServlet extends HttpServlet {
 
-    // Tài khoản admin mặc định (có thể thay bằng DB sau)
     private static final String ADMIN_USERNAME = "admin";
     private static final String ADMIN_PASSWORD = "admin123";
 
@@ -16,17 +15,28 @@ public class LoginServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
+        String action = request.getParameter("action");
+
+        // FIX: Xử lý logout trước — không kiểm tra đã đăng nhập trước
+        if ("logout".equals(action)) {
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.removeAttribute("loggedIn");
+                session.removeAttribute("username");
+                session.invalidate();
+            }
+            // FIX: Chống cache sau khi logout
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            response.setHeader("Pragma", "no-cache");
+            response.setDateHeader("Expires", 0);
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
         // Nếu đã đăng nhập rồi thì chuyển thẳng vào trang chủ
         HttpSession session = request.getSession(false);
         if (session != null && session.getAttribute("loggedIn") != null) {
             response.sendRedirect(request.getContextPath() + "/");
-            return;
-        }
-
-        String action = request.getParameter("action");
-        if ("logout".equals(action)) {
-            if (session != null) session.invalidate();
-            response.sendRedirect(request.getContextPath() + "/login");
             return;
         }
 
@@ -43,7 +53,11 @@ public class LoginServlet extends HttpServlet {
         String password = request.getParameter("password");
 
         if (ADMIN_USERNAME.equals(username) && ADMIN_PASSWORD.equals(password)) {
-            HttpSession session = request.getSession();
+            HttpSession oldSession = request.getSession(false);
+            if (oldSession != null) {
+                oldSession.invalidate();
+            }
+            HttpSession session = request.getSession(true);
             session.setAttribute("loggedIn", true);
             session.setAttribute("username", username);
             session.setMaxInactiveInterval(60 * 60); // 1 giờ
