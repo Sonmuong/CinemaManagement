@@ -100,6 +100,7 @@
         .btn-secondary { background: #6c757d; }
         .btn-secondary:hover { background: #5a6268; }
 
+        /* Table */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -109,6 +110,22 @@
         thead { background: #667eea; color: white; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #dee2e6; }
         tbody tr:hover { background: #f8f9fa; }
+
+        /* Sortable headers */
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        th.sortable:hover { background: #5568d3; }
+
+        .sort-icon {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+        th.sort-active .sort-icon { opacity: 1; }
 
         .vip-badge {
             background: #ffc107;
@@ -139,6 +156,13 @@
         }
         .stat-number { font-size: 2.5em; font-weight: bold; margin-bottom: 5px; }
         .stat-label  { opacity: 0.9; }
+
+        .sort-hint {
+            font-size: 0.82em;
+            color: #888;
+            margin-top: 8px;
+            margin-bottom: -10px;
+        }
     </style>
 </head>
 <body>
@@ -159,7 +183,6 @@
 
     <div class="content">
 
-        <%-- Hiển thị thông báo từ session --%>
         <c:if test="${sessionScope.message != null}">
             <div class="message ${sessionScope.messageType}">
                 ${sessionScope.message}
@@ -193,21 +216,25 @@
             <div class="search-box">
                 <form action="customers" method="get" style="display:flex; gap:10px; width:100%;">
                     <input type="hidden" name="action" value="search">
+                    <%-- Giữ sort state khi search --%>
+                    <c:if test="${sortBy != null}">
+                        <input type="hidden" name="sortBy"  value="${sortBy}">
+                        <input type="hidden" name="sortDir" value="${sortDir}">
+                    </c:if>
                     <input type="text" name="keyword" placeholder="🔍 Tìm theo tên, SĐT, email..."
                            value="${keyword}">
                     <button type="submit" class="btn">Tìm</button>
                 </form>
             </div>
-            <%-- Nút lọc --%>
-            <a href="customers?action=vip"    class="btn btn-secondary">⭐ Chỉ VIP</a>
-            <a href="customers"               class="btn btn-secondary">📋 Tất cả</a>
-            <%-- NÚT THÊM KHÁCH HÀNG MỚI --%>
-            <a href="customers?action=add"    class="btn btn-success">➕ Thêm khách hàng</a>
+            <a href="customers?action=vip"  class="btn btn-secondary">⭐ Chỉ VIP</a>
+            <a href="customers"             class="btn btn-secondary">📋 Tất cả</a>
+            <a href="customers?action=add"  class="btn btn-success">➕ Thêm khách hàng</a>
         </div>
 
         <c:if test="${keyword != null && !keyword.isEmpty()}">
             <p style="margin-bottom:20px; color:#666;">
-                Kết quả tìm kiếm: <strong>"${keyword}"</strong> — tìm thấy <strong>${customers.size()}</strong> khách hàng
+                Kết quả tìm kiếm: <strong>"${keyword}"</strong>
+                — tìm thấy <strong>${customers.size()}</strong> khách hàng
             </p>
         </c:if>
 
@@ -217,18 +244,67 @@
             </p>
         </c:if>
 
-        <%-- Bảng danh sách --%>
+        <%--
+            Build base URL để dùng cho sort links.
+            Giữ lại action và keyword nếu đang search/vip.
+        --%>
+        <c:set var="baseAction" value="${isVIPOnly ? 'vip' : (keyword != null && !keyword.isEmpty() ? 'search' : 'list')}"/>
+
+        <p class="sort-hint">💡 Bấm vào tiêu đề cột để sắp xếp</p>
+
         <c:choose>
             <c:when test="${not empty customers}">
                 <table>
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Họ Tên</th>
+                            <%-- Helper: tính icon và nextDir cho mỗi cột --%>
+
+                            <%-- Cột ID --%>
+                            <c:set var="col" value="id"/>
+                            <c:set var="nextDir" value="${sortBy == col && sortDir == 'asc' ? 'desc' : 'asc'}"/>
+                            <c:set var="icon"    value="${sortBy == col ? (sortDir == 'asc' ? '▲' : '▼') : '⇅'}"/>
+                            <th class="sortable ${sortBy == col ? 'sort-active' : ''}">
+                                <a href="customers?action=${baseAction}&keyword=${keyword}&sortBy=${col}&sortDir=${nextDir}"
+                                   style="color:white; text-decoration:none;">
+                                    ID <span class="sort-icon">${icon}</span>
+                                </a>
+                            </th>
+
+                            <%-- Cột Họ Tên --%>
+                            <c:set var="col" value="name"/>
+                            <c:set var="nextDir" value="${sortBy == col && sortDir == 'asc' ? 'desc' : 'asc'}"/>
+                            <c:set var="icon"    value="${sortBy == col ? (sortDir == 'asc' ? '▲' : '▼') : '⇅'}"/>
+                            <th class="sortable ${sortBy == col ? 'sort-active' : ''}">
+                                <a href="customers?action=${baseAction}&keyword=${keyword}&sortBy=${col}&sortDir=${nextDir}"
+                                   style="color:white; text-decoration:none;">
+                                    Họ Tên <span class="sort-icon">${icon}</span>
+                                </a>
+                            </th>
+
                             <th>Số Điện Thoại</th>
                             <th>Email</th>
-                            <th>Điểm Tích Lũy</th>
-                            <th>Hạng</th>
+
+                            <%-- Cột Điểm Tích Lũy --%>
+                            <c:set var="col" value="points"/>
+                            <c:set var="nextDir" value="${sortBy == col && sortDir == 'asc' ? 'desc' : 'asc'}"/>
+                            <c:set var="icon"    value="${sortBy == col ? (sortDir == 'asc' ? '▲' : '▼') : '⇅'}"/>
+                            <th class="sortable ${sortBy == col ? 'sort-active' : ''}">
+                                <a href="customers?action=${baseAction}&keyword=${keyword}&sortBy=${col}&sortDir=${nextDir}"
+                                   style="color:white; text-decoration:none;">
+                                    Điểm Tích Lũy <span class="sort-icon">${icon}</span>
+                                </a>
+                            </th>
+
+                            <%-- Cột Hạng --%>
+                            <c:set var="col" value="rank"/>
+                            <c:set var="nextDir" value="${sortBy == col && sortDir == 'asc' ? 'desc' : 'asc'}"/>
+                            <c:set var="icon"    value="${sortBy == col ? (sortDir == 'asc' ? '▲' : '▼') : '⇅'}"/>
+                            <th class="sortable ${sortBy == col ? 'sort-active' : ''}">
+                                <a href="customers?action=${baseAction}&keyword=${keyword}&sortBy=${col}&sortDir=${nextDir}"
+                                   style="color:white; text-decoration:none;">
+                                    Hạng <span class="sort-icon">${icon}</span>
+                                </a>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>

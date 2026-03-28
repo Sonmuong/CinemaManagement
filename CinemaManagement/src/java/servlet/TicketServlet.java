@@ -22,7 +22,6 @@ public class TicketServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
-        // Kiểm tra đăng nhập
         if (!isLoggedIn(request)) {
             response.sendRedirect(request.getContextPath() + "/login");
             return;
@@ -44,7 +43,6 @@ public class TicketServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
-        // Kiểm tra đăng nhập
         if (!isLoggedIn(request)) {
             response.sendRedirect(request.getContextPath() + "/login");
             return;
@@ -73,6 +71,17 @@ public class TicketServlet extends HttpServlet {
         request.getRequestDispatcher("/tickets.jsp").forward(request, response);
     }
 
+    // ── Helper: build JSON array of booked seats (safe, no JSP rendering issues) ──
+    private String buildBookedSeatsJson(List<String> bookedSeats) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < bookedSeats.size(); i++) {
+            sb.append("\"").append(bookedSeats.get(i).trim()).append("\"");
+            if (i < bookedSeats.size() - 1) sb.append(",");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     // ── Form bán vé ──────────────────────────────────────────────
     private void showSellForm(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -89,21 +98,24 @@ public class TicketServlet extends HttpServlet {
         }
         List<String> bookedSeats = showtimeDAO.getBookedSeats(showtimeId);
 
-        // Restore customer từ session nếu có (sau khi tìm khách hàng)
+        // FIX: Build JSON string để tránh lỗi render JSP forEach với whitespace
+        String bookedSeatsJson = buildBookedSeatsJson(bookedSeats);
+
+        // Restore customer từ session nếu có
         HttpSession session = request.getSession(false);
         if (session != null) {
-            Customer savedCustomer = (Customer) session.getAttribute("currentCustomer");
-            Integer savedShowtimeId = (Integer) session.getAttribute("currentShowtimeId");
+            Customer savedCustomer   = (Customer) session.getAttribute("currentCustomer");
+            Integer  savedShowtimeId = (Integer)  session.getAttribute("currentShowtimeId");
             if (savedCustomer != null && savedShowtimeId != null && savedShowtimeId == showtimeId) {
                 request.setAttribute("customer", savedCustomer);
             }
-            // Clear session customer data
             session.removeAttribute("currentCustomer");
             session.removeAttribute("currentShowtimeId");
         }
 
         request.setAttribute("showtime", showtime);
         request.setAttribute("bookedSeats", bookedSeats);
+        request.setAttribute("bookedSeatsJson", bookedSeatsJson); // FIX: thêm JSON
         request.getRequestDispatcher("/sell-ticket.jsp").forward(request, response);
     }
 
@@ -130,8 +142,10 @@ public class TicketServlet extends HttpServlet {
                 customerId = Integer.parseInt(customerIdStr);
             }
 
-            int successCount = 0;
-            int lastTicketId = -1;
+            int successCount  = 0;
+            int failBooked    = 0;
+            int failOther     = 0;
+            int lastTicketId  = -1;
 
             for (int i = 0; i < seatNumbers.length; i++) {
                 String seatNumber = seatNumbers[i].trim();
@@ -144,27 +158,37 @@ public class TicketServlet extends HttpServlet {
                 ticket.setTicketPrice(ticketPrice);
                 ticket.setCustomerId(customerId);
 
+                // Chỉ dùng điểm cho vé đầu tiên
                 boolean applyPoints = usePoints && (i == 0);
 
-                int ticketId = ticketDAO.sellTicket(ticket, applyPoints);
-                if (ticketId > 0) {
+                int result = ticketDAO.sellTicket(ticket, applyPoints);
+                if (result > 0) {
                     successCount++;
-                    lastTicketId = ticketId;
+                    lastTicketId = result;
+                } else if (result == -2) {
+                    failBooked++; // Ghế đã được đặt
+                } else {
+                    failOther++; // Lỗi khác (DB, v.v.)
                 }
             }
 
             if (successCount > 0) {
-                request.getSession().setAttribute("message",
-                    "✅ Bán vé thành công! Đã bán " + successCount + "/" + seatNumbers.length + " ghế.");
+                String msg = "✅ Bán vé thành công! Đã bán " + successCount + " ghế.";
+                if (failBooked > 0) msg += " (" + failBooked + " ghế đã có người đặt trước.)";
+                request.getSession().setAttribute("message", msg);
                 request.getSession().setAttribute("messageType", "success");
 
                 if (lastTicketId > 0) {
                     Ticket soldTicket = ticketDAO.getTicketById(lastTicketId);
                     request.getSession().setAttribute("soldTicket", soldTicket);
                 }
+            } else if (failBooked > 0) {
+                request.getSession().setAttribute("message",
+                    "❌ Tất cả ghế đã chọn đều đã được đặt bởi người khác!");
+                request.getSession().setAttribute("messageType", "error");
             } else {
                 request.getSession().setAttribute("message",
-                    "❌ Bán vé thất bại! Các ghế đã chọn có thể đã được đặt.");
+                    "❌ Bán vé thất bại! Vui lòng kiểm tra kết nối database và thử lại.");
                 request.getSession().setAttribute("messageType", "error");
             }
 
@@ -195,10 +219,9 @@ public class TicketServlet extends HttpServlet {
     }
 
     // ── Tìm khách hàng ───────────────────────────────────────────
-    // FIX: Lưu showtimeId và customer vào session để không bị mất khi redirect
     private void findCustomer(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        String phone    = request.getParameter("phone");
+        String phone         = request.getParameter("phone");
         String showtimeIdStr = request.getParameter("showtimeId");
 
         if (showtimeIdStr == null || showtimeIdStr.isEmpty()) {
@@ -206,24 +229,28 @@ public class TicketServlet extends HttpServlet {
             return;
         }
 
-        int showtimeId  = Integer.parseInt(showtimeIdStr);
+        int showtimeId           = Integer.parseInt(showtimeIdStr);
         Customer customer        = customerDAO.getCustomerByPhone(phone);
         Showtime showtime        = showtimeDAO.getShowtimeById(showtimeId);
         List<String> bookedSeats = showtimeDAO.getBookedSeats(showtimeId);
 
-        // Lưu vào session để giữ customer khi quay lại trang bán vé
+        // FIX: Build JSON
+        String bookedSeatsJson = buildBookedSeatsJson(bookedSeats);
+
         HttpSession session = request.getSession();
         if (customer != null) {
-            session.setAttribute("currentCustomer", customer);
+            session.setAttribute("currentCustomer",   customer);
             session.setAttribute("currentShowtimeId", showtimeId);
         }
 
-        request.setAttribute("showtime", showtime);
-        request.setAttribute("bookedSeats", bookedSeats);
-        request.setAttribute("customer", customer);
-        request.setAttribute("searchedPhone", phone);
+        request.setAttribute("showtime",        showtime);
+        request.setAttribute("bookedSeats",     bookedSeats);
+        request.setAttribute("bookedSeatsJson", bookedSeatsJson); // FIX
+        request.setAttribute("customer",        customer);
+        request.setAttribute("searchedPhone",   phone);
         if (customer == null) {
-            request.setAttribute("customerMessage", "⚠️ Không tìm thấy khách hàng với SĐT: " + phone + ". Sẽ bán vé lẻ.");
+            request.setAttribute("customerMessage",
+                "⚠️ Không tìm thấy khách hàng với SĐT: " + phone + ". Sẽ bán vé lẻ.");
         }
         request.getRequestDispatcher("/sell-ticket.jsp").forward(request, response);
     }

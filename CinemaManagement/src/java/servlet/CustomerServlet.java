@@ -5,6 +5,8 @@ import model.Customer;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.*;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class CustomerServlet extends HttpServlet {
@@ -25,11 +27,11 @@ public class CustomerServlet extends HttpServlet {
         if (action == null) action = "list";
 
         switch (action) {
-            case "list":      listCustomers(request, response);   break;
-            case "search":    searchCustomers(request, response); break;
-            case "vip":       listVIPCustomers(request, response);break;
-            case "add":       showAddForm(request, response);     break;
-            default:          listCustomers(request, response);
+            case "list":   listCustomers(request, response);   break;
+            case "search": searchCustomers(request, response); break;
+            case "vip":    listVIPCustomers(request, response);break;
+            case "add":    showAddForm(request, response);     break;
+            default:       listCustomers(request, response);
         }
     }
 
@@ -57,9 +59,59 @@ public class CustomerServlet extends HttpServlet {
         return session != null && session.getAttribute("loggedIn") != null;
     }
 
+    // ── Sort helper ──────────────────────────────────────────────
+    /**
+     * Áp dụng sort lên danh sách khách hàng dựa vào sortBy và sortDir từ request.
+     * sortBy: id | name | points | rank
+     * sortDir: asc | desc
+     */
+    private List<Customer> applySorting(List<Customer> customers, HttpServletRequest request) {
+        String sortBy  = request.getParameter("sortBy");
+        String sortDir = request.getParameter("sortDir");
+
+        if (sortBy == null || sortBy.isEmpty()) return customers;
+
+        // Mặc định asc, nếu đang asc thì desc và ngược lại (toggle)
+        boolean desc = "desc".equalsIgnoreCase(sortDir);
+
+        List<Customer> sorted = new ArrayList<>(customers);
+
+        Comparator<Customer> comparator;
+        switch (sortBy) {
+            case "id":
+                comparator = Comparator.comparingInt(Customer::getCustomerId);
+                break;
+            case "name":
+                comparator = Comparator.comparing(
+                    c -> c.getFullName() != null ? c.getFullName() : "",
+                    String.CASE_INSENSITIVE_ORDER);
+                break;
+            case "points":
+                comparator = Comparator.comparingDouble(Customer::getLoyaltyPoints);
+                break;
+            case "rank":
+                // VIP (>=1000) lên trên, sau đó sort theo điểm
+                comparator = Comparator.<Customer, Boolean>comparing(c -> !c.isVIP())
+                    .thenComparingDouble(c -> -c.getLoyaltyPoints());
+                break;
+            default:
+                return customers;
+        }
+
+        if (desc) comparator = comparator.reversed();
+        sorted.sort(comparator);
+
+        // Truyền lại sort state cho JSP
+        request.setAttribute("sortBy",  sortBy);
+        request.setAttribute("sortDir", desc ? "desc" : "asc");
+        return sorted;
+    }
+
+    // ── List / Search / VIP ──────────────────────────────────────
     private void listCustomers(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         List<Customer> customers = customerDAO.getAllCustomers();
+        customers = applySorting(customers, request);
         request.setAttribute("customers", customers);
         request.getRequestDispatcher("/customers.jsp").forward(request, response);
     }
@@ -70,14 +122,16 @@ public class CustomerServlet extends HttpServlet {
         List<Customer> customers = (keyword == null || keyword.trim().isEmpty())
             ? customerDAO.getAllCustomers()
             : customerDAO.searchCustomers(keyword);
+        customers = applySorting(customers, request);
         request.setAttribute("customers", customers);
-        request.setAttribute("keyword", keyword);
+        request.setAttribute("keyword",   keyword);
         request.getRequestDispatcher("/customers.jsp").forward(request, response);
     }
 
     private void listVIPCustomers(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         List<Customer> customers = customerDAO.getVIPCustomers();
+        customers = applySorting(customers, request);
         request.setAttribute("customers", customers);
         request.setAttribute("isVIPOnly", true);
         request.getRequestDispatcher("/customers.jsp").forward(request, response);
@@ -88,15 +142,15 @@ public class CustomerServlet extends HttpServlet {
         request.getRequestDispatcher("/add-customer.jsp").forward(request, response);
     }
 
+    // ── Thêm khách hàng ─────────────────────────────────────────
     private void addCustomer(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
-            String fullName = request.getParameter("fullName");
-            String phone    = request.getParameter("phone");
-            String email    = request.getParameter("email");
+            String fullName  = request.getParameter("fullName");
+            String phone     = request.getParameter("phone");
+            String email     = request.getParameter("email");
             String pointsStr = request.getParameter("loyaltyPoints");
 
-            // Kiểm tra dữ liệu cơ bản
             if (fullName == null || fullName.trim().isEmpty()
                     || phone == null || phone.trim().isEmpty()) {
                 request.getSession().setAttribute("message", "❌ Họ tên và số điện thoại là bắt buộc!");
@@ -105,10 +159,10 @@ public class CustomerServlet extends HttpServlet {
                 return;
             }
 
-            // Kiểm tra trùng số điện thoại
             Customer existing = customerDAO.getCustomerByPhone(phone.trim());
             if (existing != null) {
-                request.getSession().setAttribute("message", "❌ Số điện thoại " + phone + " đã tồn tại trong hệ thống!");
+                request.getSession().setAttribute("message",
+                    "❌ Số điện thoại " + phone + " đã tồn tại trong hệ thống!");
                 request.getSession().setAttribute("messageType", "error");
                 response.sendRedirect(request.getContextPath() + "/customers?action=add");
                 return;
@@ -120,7 +174,8 @@ public class CustomerServlet extends HttpServlet {
             customer.setEmail(email != null ? email.trim() : "");
             double initPoints = 0;
             if (pointsStr != null && !pointsStr.trim().isEmpty()) {
-                try { initPoints = Double.parseDouble(pointsStr.trim()); } catch (NumberFormatException ignored) {}
+                try { initPoints = Double.parseDouble(pointsStr.trim()); }
+                catch (NumberFormatException ignored) {}
             }
             customer.setLoyaltyPoints(initPoints);
 

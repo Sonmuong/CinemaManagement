@@ -150,7 +150,6 @@
         .legend-box.selected  { background: #667eea; border-color: #667eea; }
         .legend-box.booked    { background: #dc3545; border-color: #dc3545; }
 
-        /* Selected seats summary */
         .selected-summary {
             background: #e7f3ff;
             border: 2px solid #667eea;
@@ -269,9 +268,7 @@
                 </div>
                 <div class="info-item">
                     <span>⏰</span>
-                    <span><strong>Giờ:</strong>
-                        <fmt:formatDate value="${showtime.showTime}" pattern="HH:mm"/>
-                    </span>
+                    <span><strong>Giờ:</strong> ${showtime.showTime}</span>
                 </div>
                 <div class="info-item">
                     <span>💰</span>
@@ -295,7 +292,7 @@
                 <input type="hidden" name="action" value="findCustomer">
                 <input type="hidden" name="showtimeId" value="${showtime.showtimeId}">
                 <input type="text" name="phone" placeholder="Nhập số điện thoại..."
-                       value="${searchedPhone}" pattern="[0-9]{10}">
+                       value="${searchedPhone}">
                 <button type="submit" class="btn" style="width:auto; padding:12px 30px;">
                     🔍 Tìm
                 </button>
@@ -340,7 +337,6 @@
 
             <div class="seat-grid" id="seatGrid"></div>
 
-            <%-- Hiển thị ghế đã chọn --%>
             <div class="selected-summary" id="selectedSummary" style="display:none;">
                 <span class="label">🪑 Ghế đã chọn:</span>
                 <div class="selected-tags" id="selectedTags"></div>
@@ -353,11 +349,11 @@
 
         <%-- Form đặt vé --%>
         <div class="form-section">
-            <form action="${pageContext.request.contextPath}/tickets" method="post" id="bookingForm" onsubmit="return validateForm()">
+            <form action="${pageContext.request.contextPath}/tickets" method="post"
+                  id="bookingForm" onsubmit="return validateForm()">
                 <input type="hidden" name="action" value="create">
                 <input type="hidden" name="showtimeId" value="${showtime.showtimeId}">
                 <input type="hidden" name="ticketPrice" value="${showtime.ticketPrice}">
-                <%-- Các ghế đã chọn sẽ được inject bởi JS --%>
                 <div id="seatInputs"></div>
 
                 <c:if test="${customer != null}">
@@ -420,58 +416,55 @@
     </div>
 </div>
 
+<%-- FIX: Build booked seats array safely using JSON --%>
 <script>
-    // Danh sách ghế đã đặt từ server
-    const bookedSeats = [
-        <c:forEach var="seat" items="${bookedSeats}" varStatus="s">
-            "${seat}"<c:if test="${!s.last}">,</c:if>
-        </c:forEach>
-    ];
+    // FIX: Dùng JSON array thay vì JSP forEach để tránh lỗi khoảng trắng/xuống dòng
+    const bookedSeats = JSON.parse('${bookedSeatsJson}');
 
-    const ticketPrice   = ${showtime.ticketPrice};
-    const totalSeats    = ${showtime.totalSeats};
-    const loyaltyPoints = ${customer != null ? customer.loyaltyPoints : 0};
+    const ticketPrice   = parseFloat('${showtime.ticketPrice}') || 0;
+    const totalSeats    = parseInt('${showtime.totalSeats}')    || 100;
+    const loyaltyPoints = parseFloat('${customer != null ? customer.loyaltyPoints : 0}') || 0;
 
+    // Tạo ghế theo số ghế thực của phòng (tối đa 100 ghế = 10 hàng x 10 cột)
     const rows        = ['A','B','C','D','E','F','G','H','I','J'];
     const seatsPerRow = 10;
+    const totalRows   = Math.min(Math.ceil(totalSeats / seatsPerRow), rows.length);
 
     const seatGrid    = document.getElementById('seatGrid');
-    let selectedSeats = []; // mảng các ghế đang chọn
+    let selectedSeats = [];
 
-    // ── Tạo sơ đồ ghế ──────────────────────────────────────────
-    rows.forEach(row => {
-        for (let i = 1; i <= seatsPerRow; i++) {
-            const seatNum = row + i;
+    // Tạo sơ đồ ghế
+    for (let r = 0; r < totalRows; r++) {
+        for (let c = 1; c <= seatsPerRow; c++) {
+            const seatNum = rows[r] + c;
             const div     = document.createElement('div');
-            div.className      = 'seat';
-            div.textContent    = seatNum;
-            div.dataset.seat   = seatNum;
+            div.className   = 'seat';
+            div.textContent = seatNum;
+            div.dataset.seat = seatNum;
 
-            if (bookedSeats.includes(seatNum)) {
+            // FIX: So sánh chính xác với trim()
+            if (bookedSeats.includes(seatNum.trim())) {
                 div.classList.add('booked');
+                div.title = 'Ghế đã được đặt';
             } else {
                 div.addEventListener('click', () => toggleSeat(div, seatNum));
             }
             seatGrid.appendChild(div);
         }
-    });
+    }
 
-    // ── Toggle chọn / bỏ chọn ghế ──────────────────────────────
     function toggleSeat(el, seatNum) {
         const idx = selectedSeats.indexOf(seatNum);
         if (idx === -1) {
-            // Chọn thêm
             selectedSeats.push(seatNum);
             el.classList.add('selected');
         } else {
-            // Bỏ chọn
             selectedSeats.splice(idx, 1);
             el.classList.remove('selected');
         }
         updateUI();
     }
 
-    // ── Cập nhật UI sau mỗi thay đổi ──────────────────────────
     function updateUI() {
         const count   = selectedSeats.length;
         const summary = document.getElementById('selectedSummary');
@@ -479,53 +472,46 @@
         const countEl = document.getElementById('selectedCount');
         const inputs  = document.getElementById('seatInputs');
 
-        // Hiển thị / ẩn khung tóm tắt
         summary.style.display = count > 0 ? 'flex' : 'none';
 
-        // Render tags ghế đã chọn
         tags.innerHTML = selectedSeats
             .map(s => `<span class="seat-tag">${s}</span>`)
             .join('');
         countEl.textContent = count + ' ghế';
 
-        // Inject hidden inputs vào form (một input cho mỗi ghế)
         inputs.innerHTML = selectedSeats
             .map(s => `<input type="hidden" name="seatNumber" value="${s}">`)
             .join('');
 
-        // Cập nhật số ghế + giá
         document.getElementById('seatCountDisplay').textContent = count + ' ghế';
         document.getElementById('submitBtn').disabled = count === 0;
         updatePrice();
     }
 
-    // ── Tính lại tổng tiền ─────────────────────────────────────
     function updatePrice() {
-        const count      = selectedSeats.length;
-        const usePoints  = document.getElementById('usePoints');
-        const useDiscount = usePoints && usePoints.checked;
+        const count       = selectedSeats.length;
+        const usePointsEl = document.getElementById('usePoints');
+        const useDiscount = usePointsEl && usePointsEl.checked;
 
         let discount = 0;
         if (useDiscount && loyaltyPoints >= 100) {
-            // Tối đa: toàn bộ điểm chia 100 * 10000, không quá tổng giá vé
             const maxDiscount = Math.floor(loyaltyPoints / 100) * 10000;
             discount = Math.min(maxDiscount, ticketPrice * count);
         }
 
         const total = Math.max(0, ticketPrice * count - discount);
-
         document.getElementById('totalPrice').textContent =
             total.toLocaleString('vi-VN') + ' đ';
 
-        const discountRow = document.getElementById('discountRow');
+        const discountRow  = document.getElementById('discountRow');
         const discountDisp = document.getElementById('discountDisplay');
         if (discountRow) {
             discountRow.style.display = useDiscount && discount > 0 ? 'flex' : 'none';
-            if (discountDisp) discountDisp.textContent = '-' + discount.toLocaleString('vi-VN') + ' đ';
+            if (discountDisp)
+                discountDisp.textContent = '-' + discount.toLocaleString('vi-VN') + ' đ';
         }
     }
 
-    // ── Validate trước khi submit ──────────────────────────────
     function validateForm() {
         if (selectedSeats.length === 0) {
             alert('Vui lòng chọn ít nhất 1 ghế!');
