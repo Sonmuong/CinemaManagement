@@ -29,8 +29,25 @@
             color: white;
             padding: 30px;
             text-align: center;
+            position: relative;
         }
         .header h1 { font-size: 2em; margin-bottom: 10px; }
+
+        .logout-btn {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.2);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .logout-btn:hover { background: rgba(255,255,255,0.35); }
 
         .nav {
             background: #f8f9fa;
@@ -39,6 +56,7 @@
             gap: 15px;
             border-bottom: 2px solid #dee2e6;
             flex-wrap: wrap;
+            align-items: center;
         }
         .nav a {
             text-decoration: none;
@@ -58,8 +76,8 @@
             margin-bottom: 20px;
             font-weight: bold;
         }
-        .message.success { background: #d4edda; color: #155724; }
-        .message.error   { background: #f8d7da; color: #721c24; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message.error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 
         .toolbar {
             display: flex;
@@ -68,7 +86,7 @@
             flex-wrap: wrap;
             align-items: center;
         }
-        .search-box { flex: 1; display: flex; gap: 10px; }
+        .search-box { flex: 1; display: flex; gap: 10px; min-width: 200px; }
         .search-box input {
             flex: 1;
             padding: 12px;
@@ -95,13 +113,14 @@
         .btn:hover { background: #5568d3; transform: translateY(-2px); }
         .btn-success { background: #28a745; }
         .btn-success:hover { background: #218838; }
-        .btn-warning { background: #ffc107; color: #333; }
-        .btn-warning:hover { background: #e0a800; }
+        .btn-warning { background: #e6a817; color: #fff; }
+        .btn-warning:hover { background: #c8940f; }
         .btn-danger  { background: #dc3545; }
         .btn-danger:hover { background: #c82333; }
+        .btn-activate { background: #17a2b8; }
+        .btn-activate:hover { background: #138496; }
         .btn-sm { padding: 6px 12px; font-size: 0.82em; }
 
-        /* Grid phim */
         .movies-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -116,15 +135,23 @@
             transition: all 0.3s;
             border: 1px solid #e9ecef;
         }
+        .movie-card.inactive {
+            opacity: 0.75;
+            border-color: #dee2e6;
+        }
         .movie-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 28px rgba(0,0,0,0.15);
         }
+        .movie-card.inactive:hover { transform: translateY(-3px); }
 
         .movie-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 18px 20px;
+        }
+        .movie-card.inactive .movie-header {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
         }
         .movie-title { font-size: 1.15em; font-weight: bold; margin-bottom: 10px; }
         .movie-genres { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -140,6 +167,7 @@
         .info-row {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             margin-bottom: 7px;
             padding-bottom: 7px;
             border-bottom: 1px solid #f0f0f0;
@@ -148,25 +176,33 @@
         .info-row:last-of-type { border-bottom: none; }
         .info-label { color: #666; font-weight: 600; }
 
+        /* FIX: Status badge styles */
         .status-badge {
             padding: 4px 12px;
             border-radius: 12px;
             font-weight: bold;
             font-size: 0.82em;
+            display: inline-block;
         }
         .status-active   { background: #28a745; color: white; }
-        .status-inactive { background: #dc3545; color: white; }
+        .status-inactive { background: #6c757d; color: white; }
 
-        /* Action buttons inside card */
         .movie-actions {
             display: flex;
             gap: 7px;
             margin-top: 14px;
             flex-wrap: wrap;
         }
-        .movie-actions .btn { flex: 1; text-align: center; }
+        .movie-actions .btn { flex: 1; text-align: center; min-width: 0; }
 
         .no-results { text-align: center; padding: 50px; color: #666; font-size: 1.2em; }
+
+        .results-info {
+            margin-bottom: 20px;
+            color: #666;
+            font-size: 0.95em;
+        }
+        .results-info strong { color: #333; }
     </style>
 </head>
 <body>
@@ -174,6 +210,7 @@
     <div class="header">
         <h1>🎬 QUẢN LÝ PHIM</h1>
         <p>Danh sách phim và quản lý thông tin</p>
+        <a href="${pageContext.request.contextPath}/login?action=logout" class="logout-btn">🚪 Đăng xuất</a>
     </div>
 
     <div class="nav">
@@ -182,11 +219,11 @@
         <a href="${pageContext.request.contextPath}/showtimes">🎫 Suất chiếu</a>
         <a href="${pageContext.request.contextPath}/tickets">🎟️ Bán vé</a>
         <a href="${pageContext.request.contextPath}/customers">👥 Khách hàng</a>
+        <a href="${pageContext.request.contextPath}/reports">📊 Báo cáo</a>
     </div>
 
     <div class="content">
 
-        <%-- Thông báo --%>
         <c:if test="${sessionScope.message != null}">
             <div class="message ${sessionScope.messageType}">
                 ${sessionScope.message}
@@ -195,33 +232,30 @@
             <c:remove var="messageType" scope="session"/>
         </c:if>
 
-        <%-- Toolbar --%>
         <div class="toolbar">
             <div class="search-box">
                 <form action="movies" method="get" style="display:flex; gap:10px; width:100%;">
                     <input type="hidden" name="action" value="search">
-                    <input type="text" name="keyword" placeholder="Tìm kiếm phim..."
+                    <input type="text" name="keyword" placeholder="🔍 Tìm kiếm phim..."
                            value="${keyword}">
-                    <button type="submit" class="btn">🔍 Tìm kiếm</button>
+                    <button type="submit" class="btn">Tìm</button>
                 </form>
             </div>
             <a href="movies" class="btn" style="background:#6c757d;">📋 Tất cả</a>
             <a href="movies?action=add" class="btn btn-success">➕ Thêm phim mới</a>
         </div>
 
-        <c:if test="${keyword != null}">
-            <p style="margin-bottom:20px; color:#666;">
-                Kết quả tìm kiếm: <strong>"${keyword}"</strong>
-                (${movies.size()} kết quả)
-            </p>
+        <c:if test="${keyword != null && !keyword.isEmpty()}">
+            <div class="results-info">
+                Kết quả tìm kiếm: <strong>"${keyword}"</strong> — tìm thấy <strong>${movies.size()}</strong> phim
+            </div>
         </c:if>
 
-        <%-- Danh sách phim --%>
         <c:choose>
             <c:when test="${not empty movies}">
                 <div class="movies-grid">
                     <c:forEach var="movie" items="${movies}">
-                        <div class="movie-card">
+                        <div class="movie-card ${movie.status == 'Inactive' ? 'inactive' : ''}">
                             <div class="movie-header">
                                 <div class="movie-title">${movie.movieName}</div>
                                 <div class="movie-genres">
@@ -249,7 +283,13 @@
                                 </div>
                                 <div class="info-row">
                                     <span class="info-label">🔞 Độ tuổi</span>
-                                    <span>${movie.ageRestriction == 0 ? 'Mọi lứa tuổi' : movie.ageRestriction += '+'}</span>
+                                    <%-- FIX: Hiển thị độ tuổi đúng --%>
+                                    <span>
+                                        <c:choose>
+                                            <c:when test="${movie.ageRestriction == 0}">Mọi lứa tuổi</c:when>
+                                            <c:otherwise>${movie.ageRestriction}+</c:otherwise>
+                                        </c:choose>
+                                    </span>
                                 </div>
                                 <div class="info-row">
                                     <span class="info-label">🎬 Đạo diễn</span>
@@ -257,12 +297,13 @@
                                 </div>
                                 <div class="info-row">
                                     <span class="info-label">📊 Trạng thái</span>
+                                    <%-- FIX: Badge hiển thị đúng --%>
                                     <c:choose>
                                         <c:when test="${movie.status == 'Active'}">
-                                            <span class="status-badge status-active">Đang chiếu</span>
+                                            <span class="status-badge status-active">🟢 Đang chiếu</span>
                                         </c:when>
                                         <c:otherwise>
-                                            <span class="status-badge status-inactive">Ngừng chiếu</span>
+                                            <span class="status-badge status-inactive">⚫ Ngừng chiếu</span>
                                         </c:otherwise>
                                     </c:choose>
                                 </div>
@@ -271,7 +312,7 @@
                                 <div class="movie-actions">
                                     <%-- Xem lịch chiếu --%>
                                     <a href="showtimes?action=movie&movieId=${movie.movieId}"
-                                       class="btn btn-sm">📅 Lịch chiếu</a>
+                                       class="btn btn-sm">📅 Lịch</a>
 
                                     <%-- Sửa phim --%>
                                     <a href="movies?action=edit&movieId=${movie.movieId}"
@@ -280,20 +321,16 @@
                                     <%-- Lên lịch (chỉ khi đang chiếu) --%>
                                     <c:if test="${movie.status == 'Active'}">
                                         <a href="showtimes?action=add&movieId=${movie.movieId}"
-                                           class="btn btn-sm btn-success">➕ Lên lịch</a>
+                                           class="btn btn-sm btn-success">➕ Lịch chiếu</a>
                                     </c:if>
 
-                                    <%-- Ngừng chiếu / Kích hoạt --%>
-                                    <form action="movies" method="get" style="flex:1;"
-                                          onsubmit="return confirm('${movie.status == 'Active' ? 'Ngừng chiếu phim này?' : 'Kích hoạt lại phim này?'}')">
-                                        <input type="hidden" name="action" value="delete">
-                                        <input type="hidden" name="movieId" value="${movie.movieId}">
-                                        <button type="submit"
-                                                class="btn btn-sm ${movie.status == 'Active' ? 'btn-danger' : 'btn-success'}"
-                                                style="width:100%;">
-                                            ${movie.status == 'Active' ? '🚫 Ngừng chiếu' : '✅ Kích hoạt'}
-                                        </button>
-                                    </form>
+                                    <%-- FIX: Toggle Active/Inactive - dùng GET với action=toggle --%>
+                                    <a href="movies?action=toggle&movieId=${movie.movieId}"
+                                       class="btn btn-sm ${movie.status == 'Active' ? 'btn-danger' : 'btn-activate'}"
+                                       onclick="return confirm('${movie.status == 'Active' ? 'Ngừng chiếu phim này?' : 'Kích hoạt lại phim này?'}')"
+                                       style="flex:1; text-align:center;">
+                                        ${movie.status == 'Active' ? '🚫 Ngừng chiếu' : '✅ Kích hoạt'}
+                                    </a>
                                 </div>
                             </div>
                         </div>

@@ -18,6 +18,12 @@ public class MovieServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
+        // Kiểm tra đăng nhập
+        if (!isLoggedIn(request)) {
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
         String action = request.getParameter("action");
         if (action == null) action = "list";
 
@@ -26,7 +32,8 @@ public class MovieServlet extends HttpServlet {
             case "search": searchMovies(request, response); break;
             case "add":    showAddForm(request, response);  break;
             case "edit":   showEditForm(request, response); break;
-            case "delete": deleteMovie(request, response);  break;
+            case "toggle": toggleMovieStatus(request, response); break; // FIX: đổi tên từ "delete" -> "toggle"
+            case "delete": toggleMovieStatus(request, response); break; // giữ backward compat
             default:       listMovies(request, response);
         }
     }
@@ -37,12 +44,23 @@ public class MovieServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
+        // Kiểm tra đăng nhập
+        if (!isLoggedIn(request)) {
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
         String action = request.getParameter("action");
         if ("create".equals(action)) {
             createMovie(request, response);
         } else if ("update".equals(action)) {
             updateMovie(request, response);
         }
+    }
+
+    private boolean isLoggedIn(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        return session != null && session.getAttribute("loggedIn") != null;
     }
 
     // ── Danh sách phim ───────────────────────────────────────────
@@ -57,7 +75,9 @@ public class MovieServlet extends HttpServlet {
     private void searchMovies(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String keyword = request.getParameter("keyword");
-        List<Movie> movies = movieDAO.searchMoviesByName(keyword);
+        List<Movie> movies = (keyword == null || keyword.trim().isEmpty())
+            ? movieDAO.getAllMovies()
+            : movieDAO.searchMoviesByName(keyword);
         request.setAttribute("movies", movies);
         request.setAttribute("keyword", keyword);
         request.getRequestDispatcher("/movies.jsp").forward(request, response);
@@ -88,7 +108,6 @@ public class MovieServlet extends HttpServlet {
         try {
             Movie movie = extractMovieFromRequest(request);
 
-            // Xử lý thể loại
             String[] genreNames = request.getParameterValues("genres");
             List<Integer> genreIds = new ArrayList<>();
             if (genreNames != null) {
@@ -119,7 +138,6 @@ public class MovieServlet extends HttpServlet {
             Movie movie = extractMovieFromRequest(request);
             movie.setMovieId(movieId);
 
-            // Xử lý thể loại
             String[] genreNames = request.getParameterValues("genres");
             List<Integer> genreIds = new ArrayList<>();
             if (genreNames != null) {
@@ -142,15 +160,36 @@ public class MovieServlet extends HttpServlet {
         response.sendRedirect(request.getContextPath() + "/movies");
     }
 
-    // ── Xóa phim (chuyển sang Inactive) ──────────────────────────
-    private void deleteMovie(HttpServletRequest request, HttpServletResponse response)
+    // ── Toggle trạng thái phim (Active <-> Inactive) ──────────────
+    // FIX: Đọc trạng thái hiện tại rồi đảo ngược, thay vì luôn set Inactive
+    private void toggleMovieStatus(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
             int movieId = Integer.parseInt(request.getParameter("movieId"));
-            boolean success = movieDAO.deleteMovie(movieId);
-            request.getSession().setAttribute("message",
-                success ? "✅ Đã ngừng chiếu phim!" : "❌ Không thể ngừng chiếu!");
-            request.getSession().setAttribute("messageType", success ? "success" : "error");
+            Movie movie = movieDAO.getMovieById(movieId);
+
+            if (movie == null) {
+                request.getSession().setAttribute("message", "❌ Không tìm thấy phim!");
+                request.getSession().setAttribute("messageType", "error");
+                response.sendRedirect(request.getContextPath() + "/movies");
+                return;
+            }
+
+            // Toggle: Active -> Inactive, Inactive -> Active
+            String newStatus = "Active".equals(movie.getStatus()) ? "Inactive" : "Active";
+            movie.setStatus(newStatus);
+
+            boolean success = movieDAO.updateMovie(movie);
+            if (success) {
+                String msg = "Active".equals(newStatus)
+                    ? "✅ Đã kích hoạt phim \"" + movie.getMovieName() + "\"!"
+                    : "🚫 Đã ngừng chiếu phim \"" + movie.getMovieName() + "\"!";
+                request.getSession().setAttribute("message", msg);
+                request.getSession().setAttribute("messageType", "success");
+            } else {
+                request.getSession().setAttribute("message", "❌ Không thể thay đổi trạng thái phim!");
+                request.getSession().setAttribute("messageType", "error");
+            }
         } catch (Exception e) {
             e.printStackTrace();
             request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());
@@ -168,7 +207,8 @@ public class MovieServlet extends HttpServlet {
         movie.setReleaseYear(Integer.parseInt(request.getParameter("releaseYear")));
         movie.setAgeRestriction(Integer.parseInt(request.getParameter("ageRestriction")));
         movie.setDirector(request.getParameter("director").trim());
-        movie.setMainActors(request.getParameter("mainActors").trim());
+        String mainActors = request.getParameter("mainActors");
+        movie.setMainActors(mainActors != null ? mainActors.trim() : "");
         movie.setStatus(request.getParameter("status"));
         return movie;
     }

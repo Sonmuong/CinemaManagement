@@ -307,5 +307,44 @@ public class ShowtimeDAO {
             System.out.println("  Giá vé: " + st.getTicketPrice() + " VNĐ");
             System.out.println("  Ghế trống: " + st.getSeatsAvailable() + "/" + st.getTotalSeats());
         }
+        
     }
+      public boolean deleteShowtime(int showtimeId) {
+        // Kiểm tra xem còn vé Paid không
+        String checkSql = "SELECT COUNT(*) FROM Tickets WHERE showtime_id = ? AND payment_status = 'Paid'";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(checkSql)) {
+            ps.setInt(1, showtimeId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next() && rs.getInt(1) > 0) {
+                System.out.println("Không thể xóa: còn vé đã thanh toán!");
+                return false;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+ 
+        // Xóa các vé liên quan (đã hủy/refunded) trước
+        String deleteTicketsSql = "DELETE FROM Tickets WHERE showtime_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(deleteTicketsSql)) {
+            ps.setInt(1, showtimeId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+ 
+        // Xóa suất chiếu
+        String sql = "DELETE FROM Showtimes WHERE showtime_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, showtimeId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+ 
 }

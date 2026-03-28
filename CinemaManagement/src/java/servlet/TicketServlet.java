@@ -22,6 +22,12 @@ public class TicketServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
+        // Kiểm tra đăng nhập
+        if (!isLoggedIn(request)) {
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
         String action = request.getParameter("action");
         if (action == null) action = "list";
 
@@ -38,14 +44,25 @@ public class TicketServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
+        // Kiểm tra đăng nhập
+        if (!isLoggedIn(request)) {
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
         String action = request.getParameter("action");
         if ("create".equals(action)) {
-            sellTickets(request, response);          // đổi tên → xử lý nhiều ghế
+            sellTickets(request, response);
         } else if ("cancel".equals(action)) {
             cancelTicket(request, response);
         } else if ("findCustomer".equals(action)) {
             findCustomer(request, response);
         }
+    }
+
+    private boolean isLoggedIn(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        return session != null && session.getAttribute("loggedIn") != null;
     }
 
     // ── Danh sách vé ────────────────────────────────────────────
@@ -59,9 +76,31 @@ public class TicketServlet extends HttpServlet {
     // ── Form bán vé ──────────────────────────────────────────────
     private void showSellForm(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
+        String showtimeIdStr = request.getParameter("showtimeId");
+        if (showtimeIdStr == null || showtimeIdStr.isEmpty()) {
+            response.sendRedirect(request.getContextPath() + "/showtimes");
+            return;
+        }
+        int showtimeId = Integer.parseInt(showtimeIdStr);
         Showtime showtime = showtimeDAO.getShowtimeById(showtimeId);
+        if (showtime == null) {
+            response.sendRedirect(request.getContextPath() + "/showtimes");
+            return;
+        }
         List<String> bookedSeats = showtimeDAO.getBookedSeats(showtimeId);
+
+        // Restore customer từ session nếu có (sau khi tìm khách hàng)
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            Customer savedCustomer = (Customer) session.getAttribute("currentCustomer");
+            Integer savedShowtimeId = (Integer) session.getAttribute("currentShowtimeId");
+            if (savedCustomer != null && savedShowtimeId != null && savedShowtimeId == showtimeId) {
+                request.setAttribute("customer", savedCustomer);
+            }
+            // Clear session customer data
+            session.removeAttribute("currentCustomer");
+            session.removeAttribute("currentShowtimeId");
+        }
 
         request.setAttribute("showtime", showtime);
         request.setAttribute("bookedSeats", bookedSeats);
@@ -72,27 +111,13 @@ public class TicketServlet extends HttpServlet {
     private void sellTickets(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
-            // ══ DEBUG: in tất cả params nhận được ══
-            System.out.println("════ DEBUG sellTickets ════");
-            java.util.Enumeration<String> paramNames = request.getParameterNames();
-            while (paramNames.hasMoreElements()) {
-                String pName = paramNames.nextElement();
-                String[] pVals = request.getParameterValues(pName);
-                System.out.println("  PARAM [" + pName + "] = " + java.util.Arrays.toString(pVals));
-            }
-            System.out.println("═══════════════════════════");
-
             int showtimeId       = Integer.parseInt(request.getParameter("showtimeId"));
             String[] seatNumbers = request.getParameterValues("seatNumber");
             String ticketType    = request.getParameter("ticketType");
             double ticketPrice   = Double.parseDouble(request.getParameter("ticketPrice"));
             boolean usePoints    = "true".equals(request.getParameter("usePoints"));
 
-            System.out.println("  showtimeId=" + showtimeId + " | seatNumbers=" + java.util.Arrays.toString(seatNumbers)
-                + " | ticketPrice=" + ticketPrice + " | usePoints=" + usePoints);
-
             if (seatNumbers == null || seatNumbers.length == 0) {
-                System.out.println("  ❌ seatNumbers null hoặc rỗng — form không gửi ghế!");
                 request.getSession().setAttribute("message", "Vui lòng chọn ít nhất 1 ghế!");
                 request.getSession().setAttribute("messageType", "error");
                 response.sendRedirect(request.getContextPath() + "/tickets");
@@ -119,7 +144,6 @@ public class TicketServlet extends HttpServlet {
                 ticket.setTicketPrice(ticketPrice);
                 ticket.setCustomerId(customerId);
 
-                // Chỉ áp dụng usePoints cho ghế đầu tiên để không trừ điểm nhiều lần
                 boolean applyPoints = usePoints && (i == 0);
 
                 int ticketId = ticketDAO.sellTicket(ticket, applyPoints);
@@ -131,7 +155,7 @@ public class TicketServlet extends HttpServlet {
 
             if (successCount > 0) {
                 request.getSession().setAttribute("message",
-                    "Bán vé thành công! Đã bán " + successCount + "/" + seatNumbers.length + " ghế.");
+                    "✅ Bán vé thành công! Đã bán " + successCount + "/" + seatNumbers.length + " ghế.");
                 request.getSession().setAttribute("messageType", "success");
 
                 if (lastTicketId > 0) {
@@ -140,13 +164,13 @@ public class TicketServlet extends HttpServlet {
                 }
             } else {
                 request.getSession().setAttribute("message",
-                    "Bán vé thất bại! Các ghế đã chọn có thể đã được đặt.");
+                    "❌ Bán vé thất bại! Các ghế đã chọn có thể đã được đặt.");
                 request.getSession().setAttribute("messageType", "error");
             }
 
         } catch (Exception e) {
             e.printStackTrace();
-            request.getSession().setAttribute("message", "Lỗi: " + e.getMessage());
+            request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());
             request.getSession().setAttribute("messageType", "error");
         }
 
@@ -160,32 +184,46 @@ public class TicketServlet extends HttpServlet {
             int ticketId = Integer.parseInt(request.getParameter("ticketId"));
             boolean success = ticketDAO.cancelTicket(ticketId);
             request.getSession().setAttribute("message",
-                success ? "Hủy vé thành công!" : "Không thể hủy vé!");
+                success ? "✅ Hủy vé thành công!" : "❌ Không thể hủy vé!");
             request.getSession().setAttribute("messageType", success ? "success" : "error");
         } catch (Exception e) {
             e.printStackTrace();
-            request.getSession().setAttribute("message", "Lỗi: " + e.getMessage());
+            request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());
             request.getSession().setAttribute("messageType", "error");
         }
         response.sendRedirect(request.getContextPath() + "/tickets");
     }
 
     // ── Tìm khách hàng ───────────────────────────────────────────
+    // FIX: Lưu showtimeId và customer vào session để không bị mất khi redirect
     private void findCustomer(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String phone    = request.getParameter("phone");
-        int showtimeId  = Integer.parseInt(request.getParameter("showtimeId"));
+        String showtimeIdStr = request.getParameter("showtimeId");
 
+        if (showtimeIdStr == null || showtimeIdStr.isEmpty()) {
+            response.sendRedirect(request.getContextPath() + "/showtimes");
+            return;
+        }
+
+        int showtimeId  = Integer.parseInt(showtimeIdStr);
         Customer customer        = customerDAO.getCustomerByPhone(phone);
         Showtime showtime        = showtimeDAO.getShowtimeById(showtimeId);
         List<String> bookedSeats = showtimeDAO.getBookedSeats(showtimeId);
+
+        // Lưu vào session để giữ customer khi quay lại trang bán vé
+        HttpSession session = request.getSession();
+        if (customer != null) {
+            session.setAttribute("currentCustomer", customer);
+            session.setAttribute("currentShowtimeId", showtimeId);
+        }
 
         request.setAttribute("showtime", showtime);
         request.setAttribute("bookedSeats", bookedSeats);
         request.setAttribute("customer", customer);
         request.setAttribute("searchedPhone", phone);
         if (customer == null) {
-            request.setAttribute("customerMessage", "Không tìm thấy khách hàng. Bán vé lẻ?");
+            request.setAttribute("customerMessage", "⚠️ Không tìm thấy khách hàng với SĐT: " + phone + ". Sẽ bán vé lẻ.");
         }
         request.getRequestDispatcher("/sell-ticket.jsp").forward(request, response);
     }
