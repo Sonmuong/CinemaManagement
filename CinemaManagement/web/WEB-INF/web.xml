@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<web-app version="6.0" xmlns="https://jakarta.ee/xml/ns/jakartaee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd">
+<web-app version="6.0"
+         xmlns="https://jakarta.ee/xml/ns/jakartaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee
+                             https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd">
+
     <servlet>
         <servlet-name>MovieServlet</servlet-name>
         <servlet-class>servlet.MovieServlet</servlet-class>
@@ -16,15 +21,12 @@
         <servlet-name>TicketServlet</servlet-name>
         <servlet-class>servlet.TicketServlet</servlet-class>
     </servlet>
-    
-    <servlet-mapping>
-        <servlet-name>MovieServlet</servlet-name>
-        <url-pattern>/MovieServlet</url-pattern>
-    </servlet-mapping>
-    <servlet-mapping>
-        <servlet-name>CustomerServlet</servlet-name>
-        <url-pattern>/CustomerServlet</url-pattern>
-    </servlet-mapping>
+    <!-- Thêm mới: Servlet báo cáo thống kê -->
+    <servlet>
+        <servlet-name>ReportServlet</servlet-name>
+        <servlet-class>servlet.ReportServlet</servlet-class>
+    </servlet>
+
     <servlet-mapping>
         <servlet-name>MovieServlet</servlet-name>
         <url-pattern>/movies</url-pattern>
@@ -41,4 +43,10 @@
         <servlet-name>TicketServlet</servlet-name>
         <url-pattern>/tickets</url-pattern>
     </servlet-mapping>
+    <!-- Thêm mới: URL mapping báo cáo -->
+    <servlet-mapping>
+        <servlet-name>ReportServlet</servlet-name>
+        <url-pattern>/reports</url-pattern>
+    </servlet-mapping>
+
 </web-app>

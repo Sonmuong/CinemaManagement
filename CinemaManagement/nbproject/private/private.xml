@@ -2,6 +2,21 @@
 <project-private xmlns="http://www.netbeans.org/ns/project-private/1">
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
-        <group/>
+        <group>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/dao/ReportDAO.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/servlet/ReportServlet.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/reports.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/WEB-INF/web.xml</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/servlet/MovieServlet.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/add-showtime.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/showtimes.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/sell-ticket.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/servlet/TicketServlet.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/dao/MovieDAO.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/movie-form.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/movies.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/dao/TicketDAO.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/util/DBConnection.java</file>
+        </group>
     </open-files>
 </project-private>
