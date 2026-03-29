@@ -17,6 +17,15 @@
             <file>file:/E:/PRJ/CinemaManagement/web/movies.jsp</file>
             <file>file:/E:/PRJ/CinemaManagement/src/java/dao/TicketDAO.java</file>
             <file>file:/E:/PRJ/CinemaManagement/src/java/util/DBConnection.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/servlet/LoginServlet.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/login.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/servlet/ShowtimeServlet.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/servlet/CustomerServlet.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/dao/ShowtimeDAO.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/index.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/model/Customer.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/add-customer.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/customers.jsp</file>
         </group>
     </open-files>
 </project-private>

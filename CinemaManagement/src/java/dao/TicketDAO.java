@@ -50,26 +50,28 @@ public class TicketDAO {
     }
 
     // ── BÁN VÉ ──────────────────────────────────────────────────
+    /**
+     * Bán 1 vé cho 1 ghế.
+     * @return ticketId (>0) nếu thành công, -2 nếu ghế đã đặt, -1 nếu lỗi khác
+     */
     public int sellTicket(Ticket ticket, boolean usePoints) {
         Connection conn = null;
         try {
             conn = DBConnection.getConnection();
             if (conn == null) {
-                System.out.println("❌ Không thể kết nối database!");
+                System.out.println("❌ sellTicket: không kết nối được DB!");
                 return -1;
             }
             conn.setAutoCommit(false);
 
-            // 1. Kiểm tra ghế — nếu chưa có vé nào thì cho phép
-            boolean alreadyBooked = isSeatBookedInConn(conn, ticket.getShowtimeId(), ticket.getSeatNumber());
-            System.out.println("🔍 Ghế " + ticket.getSeatNumber() +
-                               " - showtime " + ticket.getShowtimeId() +
-                               " - đã đặt: " + alreadyBooked);
+            String seat       = ticket.getSeatNumber().trim();
+            int    showtimeId = ticket.getShowtimeId();
 
-            if (alreadyBooked) {
-                System.out.println("❌ Ghế " + ticket.getSeatNumber() + " đã được đặt!");
+            // 1. Kiểm tra ghế đã đặt chưa (trong cùng transaction)
+            if (isSeatBooked(conn, showtimeId, seat)) {
+                System.out.println("  ⚠️ Ghế " + seat + " đã được đặt!");
                 conn.rollback();
-                return -2; // Mã lỗi riêng: ghế đã đặt
+                return -2;
             }
 
             double originalPrice  = ticket.getTicketPrice();
@@ -77,22 +79,25 @@ public class TicketDAO {
             double pointsUsed     = 0;
             double finalPrice     = originalPrice;
 
-            // 2. Xử lý điểm
+            // 2. Xử lý điểm tích lũy
             if (ticket.getCustomerId() != null && usePoints) {
-                double currentPoints = getCustomerPointsInConn(conn, ticket.getCustomerId());
-                System.out.println("💎 Điểm hiện tại của KH: " + currentPoints);
-                if (currentPoints >= 100) {
-                    double usablePoints = Math.floor(currentPoints / 100) * 100;
-                    double maxDiscount  = usablePoints / 100.0 * 10000.0;
-                    discountAmount = Math.min(maxDiscount, originalPrice);
-                    pointsUsed     = Math.floor(discountAmount / 10000.0) * 100;
-                    discountAmount = pointsUsed / 100.0 * 10000.0;
-                    finalPrice     = Math.max(0, originalPrice - discountAmount);
-                    System.out.println("💳 Dùng " + pointsUsed + " điểm, giảm " + discountAmount + "đ, còn " + finalPrice + "đ");
+                double curPoints = getCustomerPoints(conn, ticket.getCustomerId());
+                System.out.println("  KH " + ticket.getCustomerId()
+                    + " điểm hiện tại: " + curPoints);
+                if (curPoints >= 100) {
+                    // Mỗi 100 điểm = 10,000 đ
+                    double usable       = Math.floor(curPoints / 100) * 100;
+                    double maxDiscount  = usable / 100.0 * 10000.0;
+                    discountAmount      = Math.min(maxDiscount, originalPrice);
+                    pointsUsed          = Math.floor(discountAmount / 10000.0) * 100;
+                    discountAmount      = pointsUsed / 100.0 * 10000.0;
+                    finalPrice          = Math.max(0, originalPrice - discountAmount);
+                    System.out.println("  Dùng " + pointsUsed + " điểm → giảm "
+                        + discountAmount + " đ → còn " + finalPrice + " đ");
                 }
             }
 
-            // 3. INSERT vé
+            // 3. INSERT vào Tickets
             String insertSql =
                 "INSERT INTO Tickets " +
                 "(customer_id, showtime_id, seat_number, ticket_type, " +
@@ -100,15 +105,18 @@ public class TicketDAO {
                 " points_used, points_earned, payment_status, payment_date) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'Paid', ?)";
 
-            PreparedStatement ps = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = conn.prepareStatement(insertSql,
+                Statement.RETURN_GENERATED_KEYS);
+
             if (ticket.getCustomerId() != null) {
                 ps.setInt(1, ticket.getCustomerId());
             } else {
                 ps.setNull(1, Types.INTEGER);
             }
-            ps.setInt(2, ticket.getShowtimeId());
-            ps.setString(3, ticket.getSeatNumber().trim()); // FIX: trim seat number
-            ps.setString(4, ticket.getTicketType() != null ? ticket.getTicketType() : "Normal");
+            ps.setInt(2, showtimeId);
+            ps.setString(3, seat);
+            ps.setString(4, ticket.getTicketType() != null
+                ? ticket.getTicketType() : "Normal");
             ps.setDouble(5, originalPrice);
             ps.setDouble(6, discountAmount);
             ps.setDouble(7, finalPrice);
@@ -117,7 +125,7 @@ public class TicketDAO {
 
             int affected = ps.executeUpdate();
             if (affected == 0) {
-                System.out.println("❌ INSERT Tickets thất bại (0 rows affected)!");
+                System.out.println("  ❌ INSERT Tickets = 0 rows!");
                 conn.rollback();
                 return -1;
             }
@@ -125,66 +133,56 @@ public class TicketDAO {
             int ticketId = -1;
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) ticketId = keys.getInt(1);
-            System.out.println("✅ INSERT vé thành công, ticket_id = " + ticketId);
+            System.out.println("  ✅ INSERT Tickets OK, ticket_id=" + ticketId);
 
             // 4. Cập nhật điểm khách hàng
             if (ticket.getCustomerId() != null && ticketId > 0) {
 
                 // 4a. Trừ điểm đã dùng
                 if (pointsUsed > 0) {
-                    PreparedStatement deductPs = conn.prepareStatement(
-                        "UPDATE Customers SET loyalty_points = loyalty_points - ? WHERE customer_id = ?");
-                    deductPs.setDouble(1, pointsUsed);
-                    deductPs.setInt(2, ticket.getCustomerId());
-                    deductPs.executeUpdate();
-                    System.out.println("💳 Đã trừ " + pointsUsed + " điểm");
+                    updatePoints(conn, ticket.getCustomerId(), -pointsUsed);
+                    insertPointTx(conn, ticket.getCustomerId(), ticketId,
+                        -pointsUsed, "Redeem", "Dùng điểm mua vé #" + ticketId);
                 }
 
-                // 4b. Tích điểm 5% final_price
-                double pointsEarned = Math.floor(finalPrice * 0.05);
-                if (pointsEarned > 0) {
+                // 4b. Tích điểm 5% finalPrice
+                double earned = Math.floor(finalPrice * 0.05);
+                if (earned > 0) {
+                    // Cập nhật points_earned trong vé
                     PreparedStatement updTicket = conn.prepareStatement(
                         "UPDATE Tickets SET points_earned = ? WHERE ticket_id = ?");
-                    updTicket.setDouble(1, pointsEarned);
+                    updTicket.setDouble(1, earned);
                     updTicket.setInt(2, ticketId);
                     updTicket.executeUpdate();
 
-                    PreparedStatement earnPs = conn.prepareStatement(
-                        "UPDATE Customers SET loyalty_points = loyalty_points + ? WHERE customer_id = ?");
-                    earnPs.setDouble(1, pointsEarned);
-                    earnPs.setInt(2, ticket.getCustomerId());
-                    earnPs.executeUpdate();
-                    System.out.println("⭐ Đã cộng " + pointsEarned + " điểm");
+                    updatePoints(conn, ticket.getCustomerId(), earned);
+                    insertPointTx(conn, ticket.getCustomerId(), ticketId,
+                        earned, "Earn", "Tích điểm mua vé #" + ticketId);
+                    System.out.println("  ⭐ Tích " + earned + " điểm");
                 }
-
-                // 4c. Ghi lịch sử điểm (không rollback nếu thất bại)
-                tryInsertPointTransaction(conn, ticket.getCustomerId(), ticketId,
-                    pointsEarned - pointsUsed, "Purchase", "Mua vé #" + ticketId);
             }
 
             conn.commit();
-            System.out.println("✅ Bán vé hoàn tất! ticket_id=" + ticketId);
+            System.out.println("  ✅ commit OK");
             return ticketId;
 
         } catch (SQLIntegrityConstraintViolationException e) {
-            // Ghế đã được đặt (UNIQUE constraint vi phạm)
-            System.out.println("❌ UNIQUE constraint: ghế đã được đặt! " + e.getMessage());
-            try { if (conn != null) conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            // Ghế đã đặt (UNIQUE constraint)
+            System.out.println("  ⚠️ UNIQUE violation: " + e.getMessage());
+            rollback(conn);
             return -2;
         } catch (SQLException e) {
-            System.out.println("❌ SQLException khi bán vé: " + e.getMessage());
+            System.out.println("  ❌ SQLException: " + e.getMessage());
             e.printStackTrace();
-            try { if (conn != null) conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            rollback(conn);
             return -1;
         } catch (Exception e) {
-            System.out.println("❌ Exception khi bán vé: " + e.getMessage());
+            System.out.println("  ❌ Exception: " + e.getMessage());
             e.printStackTrace();
-            try { if (conn != null) conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            rollback(conn);
             return -1;
         } finally {
-            try {
-                if (conn != null) { conn.setAutoCommit(true); conn.close(); }
-            } catch (SQLException e) { e.printStackTrace(); }
+            restoreAndClose(conn);
         }
     }
 
@@ -197,39 +195,36 @@ public class TicketDAO {
             conn.setAutoCommit(false);
 
             Ticket ticket = getTicketById(ticketId);
-            if (ticket == null) { conn.rollback(); return false; }
+            if (ticket == null) { rollback(conn); return false; }
 
             PreparedStatement ps = conn.prepareStatement(
                 "SELECT show_date, show_time FROM Showtimes WHERE showtime_id = ?");
             ps.setInt(1, ticket.getShowtimeId());
             ResultSet rs = ps.executeQuery();
-            if (!rs.next()) { conn.rollback(); return false; }
+            if (!rs.next()) { rollback(conn); return false; }
 
-            LocalDateTime showDateTime = LocalDateTime.of(
+            LocalDateTime showDT = LocalDateTime.of(
                 rs.getDate("show_date").toLocalDate(),
                 rs.getTime("show_time").toLocalTime());
-            long hoursUntilShow = ChronoUnit.HOURS.between(LocalDateTime.now(), showDateTime);
+            long hoursLeft = ChronoUnit.HOURS.between(LocalDateTime.now(), showDT);
 
-            String refundStatus = hoursUntilShow >= 2 ? "Refunded" : "Cancelled";
+            String newStatus = hoursLeft >= 2 ? "Refunded" : "Cancelled";
 
             PreparedStatement upd = conn.prepareStatement(
                 "UPDATE Tickets SET payment_status = ? WHERE ticket_id = ?");
-            upd.setString(1, refundStatus);
+            upd.setString(1, newStatus);
             upd.setInt(2, ticketId);
             upd.executeUpdate();
 
             if (ticket.getCustomerId() != null) {
-                double pointDelta = 0;
-                if (ticket.getPointsEarned() > 0) pointDelta -= ticket.getPointsEarned();
-                if ("Refunded".equals(refundStatus) && ticket.getPointsUsed() > 0) {
-                    pointDelta += ticket.getPointsUsed();
-                }
-                if (pointDelta != 0) {
-                    PreparedStatement updPoints = conn.prepareStatement(
-                        "UPDATE Customers SET loyalty_points = loyalty_points + ? WHERE customer_id = ?");
-                    updPoints.setDouble(1, pointDelta);
-                    updPoints.setInt(2, ticket.getCustomerId());
-                    updPoints.executeUpdate();
+                double delta = 0;
+                if (ticket.getPointsEarned() > 0) delta -= ticket.getPointsEarned();
+                if ("Refunded".equals(newStatus) && ticket.getPointsUsed() > 0)
+                    delta += ticket.getPointsUsed();
+                if (delta != 0) {
+                    updatePoints(conn, ticket.getCustomerId(), delta);
+                    insertPointTx(conn, ticket.getCustomerId(), ticketId,
+                        delta, "Refund", "Hủy vé #" + ticketId);
                 }
             }
 
@@ -238,36 +233,81 @@ public class TicketDAO {
 
         } catch (SQLException e) {
             e.printStackTrace();
-            try { if (conn != null) conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            rollback(conn);
             return false;
         } finally {
-            try {
-                if (conn != null) { conn.setAutoCommit(true); conn.close(); }
-            } catch (SQLException e) { e.printStackTrace(); }
+            restoreAndClose(conn);
         }
     }
 
-    // ── Kiểm tra ghế trong cùng connection ──────────────────────
-    private boolean isSeatBookedInConn(Connection conn, int showtimeId, String seatNumber)
+    // ── Kiểm tra ghế đã đặt (dùng trong cùng connection) ────────
+    private boolean isSeatBooked(Connection conn, int showtimeId, String seatNumber)
             throws SQLException {
-        // FIX: Chỉ check 'Paid' - bỏ 'Pending' vì hệ thống không dùng Pending
         String sql = "SELECT COUNT(*) FROM Tickets " +
                      "WHERE showtime_id = ? AND seat_number = ? " +
                      "AND payment_status = 'Paid'";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, showtimeId);
-            ps.setString(2, seatNumber.trim()); // FIX: trim để tránh lỗi khoảng trắng
+            ps.setString(2, seatNumber.trim());
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
-                int count = rs.getInt(1);
-                System.out.println("  → COUNT ghế '" + seatNumber.trim() + "' showtime " + showtimeId + " = " + count);
-                return count > 0;
+                int cnt = rs.getInt(1);
+                System.out.println("    isSeatBooked(" + seatNumber + ")=" + cnt);
+                return cnt > 0;
             }
         }
         return false;
     }
 
-    // ── Kiểm tra ghế (public) ────────────────────────────────────
+    // ── Lấy điểm khách hàng (dùng trong cùng connection) ────────
+    private double getCustomerPoints(Connection conn, int customerId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT loyalty_points FROM Customers WHERE customer_id = ?")) {
+            ps.setInt(1, customerId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getDouble("loyalty_points");
+        }
+        return 0;
+    }
+
+    // ── Cập nhật điểm (dùng trong cùng connection) ───────────────
+    private void updatePoints(Connection conn, int customerId, double delta)
+            throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE Customers SET loyalty_points = loyalty_points + ? " +
+                "WHERE customer_id = ?")) {
+            ps.setDouble(1, delta);
+            ps.setInt(2, customerId);
+            int rows = ps.executeUpdate();
+            System.out.println("    updatePoints KH=" + customerId
+                + " delta=" + delta + " rows=" + rows);
+            if (rows == 0) throw new SQLException("KH " + customerId + " không tồn tại!");
+        }
+    }
+
+    // ── Ghi lịch sử điểm (FIX: dùng đúng tên cột points_change từ schema SQL) ─
+    private void insertPointTx(Connection conn, int customerId, int ticketId,
+                               double points, String type, String desc) {
+        // Schema SQL dùng cột "points_change"
+        String sql = "INSERT INTO PointTransactions " +
+                     "(customer_id, ticket_id, points_change, " +
+                     " transaction_type, description) " +
+                     "VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, customerId);
+            if (ticketId > 0) ps.setInt(2, ticketId);
+            else ps.setNull(2, Types.INTEGER);
+            ps.setDouble(3, points);
+            ps.setString(4, type);
+            ps.setString(5, desc);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            // Không throw — bảng phụ lỗi không nên rollback giao dịch chính
+            System.out.println("    ⚠️ PointTransactions insert lỗi: " + e.getMessage());
+        }
+    }
+
+    // ── Kiểm tra ghế (public, dùng ngoài transaction) ───────────
     public boolean isSeatBooked(int showtimeId, String seatNumber) {
         String sql = "SELECT COUNT(*) FROM Tickets " +
                      "WHERE showtime_id = ? AND seat_number = ? " +
@@ -280,42 +320,6 @@ public class TicketDAO {
             if (rs.next()) return rs.getInt(1) > 0;
         } catch (SQLException e) { e.printStackTrace(); }
         return false;
-    }
-
-    // ── Lấy điểm khách hàng trong cùng connection ───────────────
-    private double getCustomerPointsInConn(Connection conn, int customerId) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT loyalty_points FROM Customers WHERE customer_id = ?")) {
-            ps.setInt(1, customerId);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) return rs.getDouble("loyalty_points");
-        }
-        return 0;
-    }
-
-    // ── Ghi lịch sử điểm — không throw nếu thất bại ─────────────
-    private void tryInsertPointTransaction(Connection conn, int customerId, int ticketId,
-                                           double pointDelta, String type, String desc) {
-        // Thử với tên cột 'points_change' trước, sau đó 'points'
-        String[] cols = {"points_change", "points"};
-        for (String col : cols) {
-            try {
-                String sql = "INSERT INTO PointTransactions " +
-                    "(customer_id, ticket_id, " + col + ", transaction_type, description, transaction_date) " +
-                    "VALUES (?, ?, ?, ?, ?, ?)";
-                PreparedStatement ps = conn.prepareStatement(sql);
-                ps.setInt(1, customerId);
-                ps.setInt(2, ticketId);
-                ps.setDouble(3, pointDelta);
-                ps.setString(4, type);
-                ps.setString(5, desc);
-                ps.setTimestamp(6, new Timestamp(System.currentTimeMillis()));
-                ps.executeUpdate();
-                return; // Thành công
-            } catch (SQLException e) {
-                System.out.println("⚠️ PointTransactions cột '" + col + "': " + e.getMessage());
-            }
-        }
     }
 
     // ── Lấy vé theo khách hàng ──────────────────────────────────
@@ -338,34 +342,45 @@ public class TicketDAO {
         return tickets;
     }
 
-    // ── Extract Ticket từ ResultSet ──────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────
+    private void rollback(Connection conn) {
+        if (conn != null) try { conn.rollback(); } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void restoreAndClose(Connection conn) {
+        if (conn != null) try {
+            conn.setAutoCommit(true);
+            conn.close();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
     private Ticket extractTicketFromResultSet(ResultSet rs) throws SQLException {
-        Ticket ticket = new Ticket();
-        ticket.setTicketId(rs.getInt("ticket_id"));
+        Ticket t = new Ticket();
+        t.setTicketId(rs.getInt("ticket_id"));
 
         int customerId = rs.getInt("customer_id");
-        if (!rs.wasNull()) ticket.setCustomerId(customerId);
+        if (!rs.wasNull()) t.setCustomerId(customerId);
 
-        ticket.setShowtimeId(rs.getInt("showtime_id"));
-        ticket.setSeatNumber(rs.getString("seat_number"));
-        ticket.setTicketType(rs.getString("ticket_type"));
-        ticket.setTicketPrice(rs.getDouble("ticket_price"));
-        ticket.setDiscountAmount(rs.getDouble("discount_amount"));
-        ticket.setFinalPrice(rs.getDouble("final_price"));
-        ticket.setPointsUsed(rs.getDouble("points_used"));
-        ticket.setPointsEarned(rs.getDouble("points_earned"));
-        ticket.setPaymentStatus(rs.getString("payment_status"));
-        ticket.setBookingDate(rs.getTimestamp("booking_date"));
+        t.setShowtimeId(rs.getInt("showtime_id"));
+        t.setSeatNumber(rs.getString("seat_number"));
+        t.setTicketType(rs.getString("ticket_type"));
+        t.setTicketPrice(rs.getDouble("ticket_price"));
+        t.setDiscountAmount(rs.getDouble("discount_amount"));
+        t.setFinalPrice(rs.getDouble("final_price"));
+        t.setPointsUsed(rs.getDouble("points_used"));
+        t.setPointsEarned(rs.getDouble("points_earned"));
+        t.setPaymentStatus(rs.getString("payment_status"));
+        t.setBookingDate(rs.getTimestamp("booking_date"));
 
-        Timestamp paymentDate = rs.getTimestamp("payment_date");
-        if (paymentDate != null) ticket.setPaymentDate(paymentDate);
+        Timestamp payDate = rs.getTimestamp("payment_date");
+        if (payDate != null) t.setPaymentDate(payDate);
 
-        ticket.setCustomerName(rs.getString("customer_name"));
-        ticket.setMovieName(rs.getString("movie_name"));
-        ticket.setRoomName(rs.getString("room_name"));
-        ticket.setShowDate(rs.getDate("show_date"));
-        ticket.setShowTime(rs.getString("show_time"));
+        t.setCustomerName(rs.getString("customer_name"));
+        t.setMovieName(rs.getString("movie_name"));
+        t.setRoomName(rs.getString("room_name"));
+        t.setShowDate(rs.getDate("show_date"));
+        t.setShowTime(rs.getString("show_time"));
 
-        return ticket;
+        return t;
     }
 }
