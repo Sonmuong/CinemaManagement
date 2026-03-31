@@ -62,7 +62,6 @@
         .customer-panel-header h3 { font-size: 1em; color: #444; }
         .customer-panel-body { padding: 18px 20px; }
 
-        /* Trạng thái: chưa tìm khách */
         .search-form { display: flex; gap: 10px; }
         .search-form input {
             flex: 1; padding: 10px 14px;
@@ -70,7 +69,6 @@
         }
         .search-form input:focus { outline: none; border-color: #667eea; }
 
-        /* Trạng thái: đã tìm thấy khách */
         .member-card {
             background: linear-gradient(135deg, #eeedfe 0%, #ddd9fd 100%);
             border-radius: 10px;
@@ -111,7 +109,6 @@
         }
         .btn-change-customer:hover { background: #667eea; color: white; }
 
-        /* Trạng thái: không tìm thấy / vé lẻ */
         .guest-card {
             background: #f8f9fa;
             border-radius: 10px;
@@ -202,6 +199,19 @@
         }
         select:focus, input:focus { outline: none; border-color: #667eea; }
 
+        /* FIX: Ticket type badge hiện giá */
+        .ticket-type-hint {
+            font-size: 0.8em;
+            margin-top: 5px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .hint-normal   { background: #e9ecef; color: #495057; }
+        .hint-vip      { background: #fff3cd; color: #856404; }
+        .hint-student  { background: #d1ecf1; color: #0c5460; }
+
         /* Checkbox dùng điểm */
         .use-points-box {
             background: linear-gradient(135deg, #eeedfe 0%, #ddd9fd 100%);
@@ -230,8 +240,9 @@
             padding-top: 10px; border-top: 2px solid #667eea; border-bottom: none;
             margin-top: 4px;
         }
-        .price-row.discount { color: #dc3545; }
-        .price-row.earned   { color: #28a745; }
+        .price-row.surcharge { color: #e67e22; }
+        .price-row.discount  { color: #dc3545; }
+        .price-row.earned    { color: #28a745; }
 
         /* Buttons */
         .btn-submit {
@@ -251,7 +262,6 @@
         }
         .btn-cancel:hover { background: #dee2e6; }
 
-        /* Search btn */
         .btn-search {
             padding: 10px 20px; background: #667eea; color: white;
             border: none; border-radius: 8px; font-weight: bold;
@@ -260,11 +270,6 @@
         .btn-search:hover { background: #5568d3; }
 
         .note { font-size: 0.82em; color: #999; text-align: center; margin-top: 8px; }
-        .msg-not-found {
-            color: #856404; background: #fff3cd;
-            border: 1px solid #ffc107; border-radius: 8px;
-            padding: 10px 14px; font-size: 0.9em; margin-top: 10px;
-        }
     </style>
 </head>
 <body>
@@ -281,7 +286,7 @@
                 <div class="info-item">🏛️ <span><b>Phòng:</b> ${showtime.roomName}</span></div>
                 <div class="info-item">📅 <span><b>Ngày:</b> <fmt:formatDate value="${showtime.showDate}" pattern="dd/MM/yyyy"/></span></div>
                 <div class="info-item">⏰ <span><b>Giờ:</b> <fmt:formatDate value="${showtime.showTime}" pattern="HH:mm"/></span></div>
-                <div class="info-item">💰 <span><b>Giá/vé:</b> <fmt:formatNumber value="${showtime.ticketPrice}" pattern="#,##0"/> đ</span></div>
+                <div class="info-item">💰 <span><b>Giá gốc/vé:</b> <fmt:formatNumber value="${showtime.ticketPrice}" pattern="#,##0"/> đ</span></div>
                 <div class="info-item">🪑 <span><b>Còn:</b> ${showtime.seatsAvailable}/${showtime.totalSeats} ghế</span></div>
             </div>
         </div>
@@ -298,7 +303,6 @@
             </div>
             <div class="customer-panel-body">
 
-                <%-- CASE 1: Đã tìm thấy khách hàng --%>
                 <c:if test="${customer != null}">
                     <div class="member-card">
                         <div class="member-avatar ${customer.VIP ? 'vip' : ''}">
@@ -322,7 +326,6 @@
                             </c:choose>
                         </div>
                     </div>
-                    <%-- Form tìm lại (ẩn) --%>
                     <div id="searchFormHidden" style="display:none; margin-top:14px;">
                         <form action="${pageContext.request.contextPath}/tickets" method="post" class="search-form">
                             <input type="hidden" name="action" value="findCustomer">
@@ -333,9 +336,7 @@
                     </div>
                 </c:if>
 
-                <%-- CASE 2: Không tìm thấy / chưa tìm --%>
                 <c:if test="${customer == null}">
-                    <%-- Sub-case: đã tìm nhưng không thấy → hiện guest card + form lại --%>
                     <c:if test="${customerNotFound}">
                         <div class="guest-card" style="margin-bottom:14px;">
                             <div class="guest-icon">👤</div>
@@ -345,8 +346,6 @@
                             </div>
                         </div>
                     </c:if>
-
-                    <%-- Form tìm kiếm luôn hiện khi chưa có customer --%>
                     <form action="${pageContext.request.contextPath}/tickets" method="post" class="search-form">
                         <input type="hidden" name="action" value="findCustomer">
                         <input type="hidden" name="showtimeId" value="${showtime.showtimeId}">
@@ -388,8 +387,8 @@
                       method="post" id="bookingForm"
                       onsubmit="return validateAndPrepare()">
 
-                    <input type="hidden" name="action" value="create">
-                    <input type="hidden" name="showtimeId" value="${showtime.showtimeId}">
+                    <input type="hidden" name="action"      value="create">
+                    <input type="hidden" name="showtimeId"  value="${showtime.showtimeId}">
                     <input type="hidden" name="ticketPrice" value="${showtime.ticketPrice}">
                     <div id="seatInputs"></div>
 
@@ -400,11 +399,16 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>🎫 Loại vé</label>
-                            <select name="ticketType" required>
-                                <option value="Normal">Vé Thường</option>
+                            <%-- FIX: onchange gọi updatePrice() để tính lại giá ngay khi đổi loại vé --%>
+                            <select name="ticketType" id="ticketType" required onchange="updatePrice()">
+                                <option value="Normal">Vé Thường (giá gốc)</option>
                                 <option value="VIP">Vé VIP (+20%)</option>
                                 <option value="Student">Vé Sinh Viên (-10%)</option>
                             </select>
+                            <%-- Hiện gợi ý giá theo loại vé --%>
+                            <div id="typeHint" class="ticket-type-hint hint-normal">
+                                Giá gốc: <span id="hintPrice"></span> đ/ghế
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>🪑 Số ghế đã chọn</label>
@@ -436,8 +440,13 @@
                             <span id="seatCountDisplay">0 ghế</span>
                         </div>
                         <div class="price-row">
-                            <span>Đơn giá</span>
-                            <span><fmt:formatNumber value="${showtime.ticketPrice}" pattern="#,##0"/> đ/ghế</span>
+                            <span>Giá gốc/ghế</span>
+                            <span id="basePriceDisplay">0 đ</span>
+                        </div>
+                        <%-- FIX: Dòng hiện phụ thu VIP hoặc giảm SV --%>
+                        <div class="price-row surcharge" id="typeAdjRow" style="display:none;">
+                            <span id="typeAdjLabel">Phụ thu VIP (+20%)</span>
+                            <span id="typeAdjDisplay">0 đ</span>
                         </div>
                         <div class="price-row discount" id="discountRow" style="display:none;">
                             <span>Giảm giá (điểm)</span>
@@ -468,13 +477,19 @@
 
 <script>
     const bookedSeats   = [<c:forEach var="s" items="${bookedSeats}" varStatus="st">"${s}"<c:if test="${!st.last}">,</c:if></c:forEach>];
-    const ticketPrice   = ${showtime.ticketPrice};
+    const basePrice     = ${showtime.ticketPrice};   // giá gốc từ server
     const loyaltyPoints = ${customer != null ? customer.loyaltyPoints : 0};
     const hasCustomer   = ${customer != null ? 'true' : 'false'};
 
     let selectedSeats = [];
 
-    // Tạo sơ đồ ghế
+    // ── Khởi tạo hiển thị giá gốc ──
+    document.getElementById('basePriceDisplay').textContent =
+        basePrice.toLocaleString('vi-VN') + ' đ';
+    document.getElementById('hintPrice').textContent =
+        basePrice.toLocaleString('vi-VN');
+
+    // ── Tạo sơ đồ ghế ──
     const rows = ['A','B','C','D','E','F','G','H','I','J'];
     rows.forEach(row => {
         for (let i = 1; i <= 10; i++) {
@@ -524,36 +539,79 @@
     }
 
     function updatePrice() {
-        const count = selectedSeats.length;
+        const count      = selectedSeats.length;
+        const ticketType = document.getElementById('ticketType').value;
+
+        // ── FIX: Tính giá theo loại vé ──
+        let pricePerSeat = basePrice;
+        let typeAdj      = 0;
+        let typeAdjLabel = '';
+        const typeHint   = document.getElementById('typeHint');
+
+        if (ticketType === 'VIP') {
+            pricePerSeat = Math.round(basePrice * 1.2);
+            typeAdj      = pricePerSeat - basePrice;      // +20% mỗi ghế
+            typeAdjLabel = '📈 Phụ thu VIP (+20%)';
+            typeHint.className = 'ticket-type-hint hint-vip';
+            typeHint.innerHTML = 'Giá VIP: <strong>' + pricePerSeat.toLocaleString('vi-VN') + '</strong> đ/ghế';
+        } else if (ticketType === 'Student') {
+            pricePerSeat = Math.round(basePrice * 0.9);
+            typeAdj      = pricePerSeat - basePrice;      // -10% mỗi ghế (số âm)
+            typeAdjLabel = '📉 Giảm Sinh viên (-10%)';
+            typeHint.className = 'ticket-type-hint hint-student';
+            typeHint.innerHTML = 'Giá SV: <strong>' + pricePerSeat.toLocaleString('vi-VN') + '</strong> đ/ghế';
+        } else {
+            typeHint.className = 'ticket-type-hint hint-normal';
+            typeHint.innerHTML = 'Giá gốc: <strong>' + basePrice.toLocaleString('vi-VN') + '</strong> đ/ghế';
+        }
+
+        const subtotal = pricePerSeat * count;
+
+        // Hiện/ẩn dòng điều chỉnh loại vé
+        const typeAdjRow = document.getElementById('typeAdjRow');
+        if (typeAdj !== 0 && count > 0) {
+            typeAdjRow.style.display = 'flex';
+            document.getElementById('typeAdjLabel').textContent   = typeAdjLabel;
+            document.getElementById('typeAdjDisplay').textContent =
+                (typeAdj > 0 ? '+' : '') + (typeAdj * count).toLocaleString('vi-VN') + ' đ';
+            // Màu khác nhau cho tăng / giảm
+            typeAdjRow.className = typeAdj > 0 ? 'price-row surcharge' : 'price-row discount';
+        } else {
+            typeAdjRow.style.display = 'none';
+        }
+
+        // ── Xử lý điểm tích lũy ──
         const usePointsEl = document.getElementById('usePoints');
         const useDiscount = usePointsEl && usePointsEl.checked;
 
         let discount = 0;
         if (useDiscount && loyaltyPoints >= 100) {
-            const usable = Math.floor(loyaltyPoints / 100) * 100;
-            discount = Math.min(usable / 100 * 10000, ticketPrice * count);
-            discount = Math.floor(discount / 10000) * 10000;
+            const usable   = Math.floor(loyaltyPoints / 100) * 100;
+            const maxDisc  = usable / 100 * 10000;
+            discount       = Math.min(maxDisc, subtotal);
+            discount       = Math.floor(discount / 10000) * 10000;
         }
 
-        const subtotal = ticketPrice * count;
-        const total    = Math.max(0, subtotal - discount);
-        const earned   = hasCustomer ? Math.floor(total * 0.05) : 0;
+        const total  = Math.max(0, subtotal - discount);
+        const earned = hasCustomer ? Math.floor(total * 0.05) : 0;
 
         document.getElementById('totalPrice').textContent =
             total.toLocaleString('vi-VN') + ' đ';
 
+        // Dòng giảm giá điểm
         const dRow = document.getElementById('discountRow');
-        const dDisp = document.getElementById('discountDisplay');
         if (dRow) {
             dRow.style.display = (useDiscount && discount > 0) ? 'flex' : 'none';
-            if (dDisp) dDisp.textContent = '-' + discount.toLocaleString('vi-VN') + ' đ';
+            document.getElementById('discountDisplay').textContent =
+                '-' + discount.toLocaleString('vi-VN') + ' đ';
         }
 
+        // Dòng điểm tích được
         const eRow = document.getElementById('earnRow');
-        const eDisp = document.getElementById('earnDisplay');
         if (eRow) {
             eRow.style.display = (hasCustomer && count > 0) ? 'flex' : 'none';
-            if (eDisp) eDisp.textContent = '+' + earned.toLocaleString('vi-VN') + ' điểm';
+            document.getElementById('earnDisplay').textContent =
+                '+' + earned.toLocaleString('vi-VN') + ' điểm';
         }
     }
 
@@ -574,7 +632,7 @@
         return true;
     }
 
-    // Init price display
+    // Init
     updatePrice();
 </script>
 </body>

@@ -126,12 +126,10 @@
         th, td { padding: 13px 15px; text-align: left; border-bottom: 1px solid #dee2e6; font-size: 0.92em; }
         tbody tr:hover { background: #f8f9fa; }
 
-        /* FIX: Row mờ đi khi đã hủy */
         tbody tr.cancelled-row { background: #f8f8f8; color: #999; }
         tbody tr.cancelled-row:hover { background: #f0f0f0; }
         tbody tr.cancelled-row td { color: #999; }
 
-        /* FIX: Status badges đúng màu */
         .status-badge {
             padding: 5px 14px;
             border-radius: 12px;
@@ -161,7 +159,7 @@
         .progress-fill.medium { background: linear-gradient(90deg, #ffc107, #fd7e14); }
         .progress-fill.low    { background: linear-gradient(90deg, #dc3545, #e83e8c); }
 
-        .action-group { display: flex; flex-direction: column; gap: 5px; min-width: 120px; }
+        .action-group { display: flex; flex-direction: column; gap: 5px; min-width: 130px; }
         .action-group .btn {
             padding: 6px 12px;
             font-size: 0.82em;
@@ -250,7 +248,6 @@
                     </thead>
                     <tbody>
                     <c:forEach var="st" items="${showtimes}">
-                        <%-- FIX: Thêm class cho row đã hủy --%>
                         <tr class="${st.status == 'Cancelled' ? 'cancelled-row' : ''}">
                             <td>#${st.showtimeId}</td>
                             <td><strong>${st.movieName}</strong></td>
@@ -267,14 +264,12 @@
                                         <fmt:formatNumber value="${st.occupancyRate}" pattern="#,##0.0"/>%
                                     </span>
                                     <div class="progress-bar" style="flex:1;">
-                                        <%-- FIX: Màu progress bar theo tỷ lệ --%>
                                         <div class="progress-fill ${st.occupancyRate >= 70 ? '' : st.occupancyRate >= 40 ? 'medium' : 'low'}"
                                              style="width:${st.occupancyRate}%"></div>
                                     </div>
                                 </div>
                             </td>
                             <td>
-                                <%-- FIX: Badge trạng thái đúng --%>
                                 <c:choose>
                                     <c:when test="${st.status == 'Scheduled'}">
                                         <span class="status-badge status-scheduled">🟢 Đang chiếu</span>
@@ -288,10 +283,9 @@
                                 <div class="action-group">
                                     <c:choose>
                                         <c:when test="${st.status == 'Scheduled'}">
-                                            <%-- Nút bán vé --%>
+                                            <%-- Suất đang chiếu: Bán vé + Hủy suất --%>
                                             <a href="${pageContext.request.contextPath}/tickets?action=sell&showtimeId=${st.showtimeId}"
                                                class="btn btn-success">🎟️ Bán vé</a>
-                                            <%-- Nút hủy suất chiếu --%>
                                             <form action="showtimes" method="post"
                                                   onsubmit="return confirm('Bạn có chắc muốn hủy suất chiếu #${st.showtimeId}?')">
                                                 <input type="hidden" name="action" value="cancel">
@@ -300,9 +294,9 @@
                                             </form>
                                         </c:when>
                                         <c:otherwise>
-                                            <%-- FIX: Khi đã hủy, hiển thị nút Xóa và Sửa --%>
+                                            <%-- Suất đã hủy: Kích hoạt lại + Xóa --%>
                                             <a href="showtimes?action=edit&showtimeId=${st.showtimeId}"
-                                               class="btn btn-warning">✏️ Sửa</a>
+                                               class="btn btn-success">✅ Kích hoạt</a>
                                             <form action="showtimes" method="post"
                                                   onsubmit="return confirm('Xóa vĩnh viễn suất chiếu #${st.showtimeId}? Hành động này không thể hoàn tác!')">
                                                 <input type="hidden" name="action" value="delete">

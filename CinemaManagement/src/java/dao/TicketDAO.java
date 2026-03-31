@@ -52,6 +52,10 @@ public class TicketDAO {
     // ── BÁN VÉ ──────────────────────────────────────────────────
     /**
      * Bán 1 vé cho 1 ghế.
+     * FIX: Tính đúng giá theo ticketType trước khi áp dụng điểm.
+     *   - VIP     : giá gốc × 1.2  (+20%)
+     *   - Student : giá gốc × 0.9  (-10%)
+     *   - Normal  : giá gốc
      * @return ticketId (>0) nếu thành công, -2 nếu ghế đã đặt, -1 nếu lỗi khác
      */
     public int sellTicket(Ticket ticket, boolean usePoints) {
@@ -67,37 +71,55 @@ public class TicketDAO {
             String seat       = ticket.getSeatNumber().trim();
             int    showtimeId = ticket.getShowtimeId();
 
-            // 1. Kiểm tra ghế đã đặt chưa (trong cùng transaction)
+            // 1. Kiểm tra ghế đã đặt chưa
             if (isSeatBooked(conn, showtimeId, seat)) {
                 System.out.println("  ⚠️ Ghế " + seat + " đã được đặt!");
                 conn.rollback();
                 return -2;
             }
 
-            double originalPrice  = ticket.getTicketPrice();
+            // 2. FIX: Tính giá theo loại vé
+            double basePrice     = ticket.getTicketPrice();   // giá gốc từ showtime
+            double pricePerSeat  = basePrice;
+            String ticketType    = ticket.getTicketType() != null ? ticket.getTicketType() : "Normal";
+
+            switch (ticketType) {
+                case "VIP":
+                    pricePerSeat = Math.round(basePrice * 1.2);   // +20%
+                    break;
+                case "Student":
+                    pricePerSeat = Math.round(basePrice * 0.9);   // -10%
+                    break;
+                default:
+                    pricePerSeat = basePrice;
+            }
+
+            System.out.println("  TicketType=" + ticketType
+                + " basePrice=" + basePrice
+                + " pricePerSeat=" + pricePerSeat);
+
             double discountAmount = 0;
             double pointsUsed     = 0;
-            double finalPrice     = originalPrice;
+            double finalPrice     = pricePerSeat;
 
-            // 2. Xử lý điểm tích lũy
+            // 3. Xử lý điểm tích lũy (tính trên pricePerSeat, không phải basePrice)
             if (ticket.getCustomerId() != null && usePoints) {
                 double curPoints = getCustomerPoints(conn, ticket.getCustomerId());
                 System.out.println("  KH " + ticket.getCustomerId()
                     + " điểm hiện tại: " + curPoints);
                 if (curPoints >= 100) {
-                    // Mỗi 100 điểm = 10,000 đ
-                    double usable       = Math.floor(curPoints / 100) * 100;
-                    double maxDiscount  = usable / 100.0 * 10000.0;
-                    discountAmount      = Math.min(maxDiscount, originalPrice);
-                    pointsUsed          = Math.floor(discountAmount / 10000.0) * 100;
-                    discountAmount      = pointsUsed / 100.0 * 10000.0;
-                    finalPrice          = Math.max(0, originalPrice - discountAmount);
+                    double usable      = Math.floor(curPoints / 100) * 100;
+                    double maxDiscount = usable / 100.0 * 10000.0;
+                    discountAmount     = Math.min(maxDiscount, pricePerSeat);
+                    pointsUsed         = Math.floor(discountAmount / 10000.0) * 100;
+                    discountAmount     = pointsUsed / 100.0 * 10000.0;
+                    finalPrice         = Math.max(0, pricePerSeat - discountAmount);
                     System.out.println("  Dùng " + pointsUsed + " điểm → giảm "
                         + discountAmount + " đ → còn " + finalPrice + " đ");
                 }
             }
 
-            // 3. INSERT vào Tickets
+            // 4. INSERT vào Tickets — lưu pricePerSeat (đã tính loại vé) làm ticket_price
             String insertSql =
                 "INSERT INTO Tickets " +
                 "(customer_id, showtime_id, seat_number, ticket_type, " +
@@ -115,9 +137,8 @@ public class TicketDAO {
             }
             ps.setInt(2, showtimeId);
             ps.setString(3, seat);
-            ps.setString(4, ticket.getTicketType() != null
-                ? ticket.getTicketType() : "Normal");
-            ps.setDouble(5, originalPrice);
+            ps.setString(4, ticketType);
+            ps.setDouble(5, pricePerSeat);      // FIX: lưu giá đã nhân hệ số
             ps.setDouble(6, discountAmount);
             ps.setDouble(7, finalPrice);
             ps.setDouble(8, pointsUsed);
@@ -135,20 +156,19 @@ public class TicketDAO {
             if (keys.next()) ticketId = keys.getInt(1);
             System.out.println("  ✅ INSERT Tickets OK, ticket_id=" + ticketId);
 
-            // 4. Cập nhật điểm khách hàng
+            // 5. Cập nhật điểm khách hàng
             if (ticket.getCustomerId() != null && ticketId > 0) {
 
-                // 4a. Trừ điểm đã dùng
+                // 5a. Trừ điểm đã dùng
                 if (pointsUsed > 0) {
                     updatePoints(conn, ticket.getCustomerId(), -pointsUsed);
                     insertPointTx(conn, ticket.getCustomerId(), ticketId,
                         -pointsUsed, "Redeem", "Dùng điểm mua vé #" + ticketId);
                 }
 
-                // 4b. Tích điểm 5% finalPrice
+                // 5b. Tích điểm 5% finalPrice
                 double earned = Math.floor(finalPrice * 0.05);
                 if (earned > 0) {
-                    // Cập nhật points_earned trong vé
                     PreparedStatement updTicket = conn.prepareStatement(
                         "UPDATE Tickets SET points_earned = ? WHERE ticket_id = ?");
                     updTicket.setDouble(1, earned);
@@ -167,7 +187,6 @@ public class TicketDAO {
             return ticketId;
 
         } catch (SQLIntegrityConstraintViolationException e) {
-            // Ghế đã đặt (UNIQUE constraint)
             System.out.println("  ⚠️ UNIQUE violation: " + e.getMessage());
             rollback(conn);
             return -2;
@@ -285,10 +304,9 @@ public class TicketDAO {
         }
     }
 
-    // ── Ghi lịch sử điểm (FIX: dùng đúng tên cột points_change từ schema SQL) ─
+    // ── Ghi lịch sử điểm ─────────────────────────────────────────
     private void insertPointTx(Connection conn, int customerId, int ticketId,
                                double points, String type, String desc) {
-        // Schema SQL dùng cột "points_change"
         String sql = "INSERT INTO PointTransactions " +
                      "(customer_id, ticket_id, points_change, " +
                      " transaction_type, description) " +
@@ -302,7 +320,6 @@ public class TicketDAO {
             ps.setString(5, desc);
             ps.executeUpdate();
         } catch (SQLException e) {
-            // Không throw — bảng phụ lỗi không nên rollback giao dịch chính
             System.out.println("    ⚠️ PointTransactions insert lỗi: " + e.getMessage());
         }
     }
