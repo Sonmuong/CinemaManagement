@@ -26,6 +26,8 @@
             <file>file:/E:/PRJ/CinemaManagement/src/java/model/Customer.java</file>
             <file>file:/E:/PRJ/CinemaManagement/web/add-customer.jsp</file>
             <file>file:/E:/PRJ/CinemaManagement/web/customers.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/ticket-result.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/model/Ticket.java</file>
         </group>
     </open-files>
 </project-private>
