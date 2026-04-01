@@ -224,11 +224,14 @@
         </div>
         
         <div class="nav">
-            <a href="${pageContext.request.contextPath}/">🏠 Trang chủ</a>
-            <a href="${pageContext.request.contextPath}/movies">🎥 Phim</a>
-            <a href="${pageContext.request.contextPath}/showtimes">🎫 Suất chiếu</a>
-            <a href="${pageContext.request.contextPath}/tickets">🎟️ Vé</a>
-            <a href="${pageContext.request.contextPath}/customers">👥 Khách hàng</a>
+<div class="nav">
+    <a href="${pageContext.request.contextPath}/">🏠 Trang chủ</a>
+    <a href="${pageContext.request.contextPath}/movies">🎥 Phim</a>
+    <a href="${pageContext.request.contextPath}/showtimes">🎫 Suất chiếu</a>
+    <a href="${pageContext.request.contextPath}/tickets">🎟️ Vé</a>
+    <a href="${pageContext.request.contextPath}/customers">👥 Khách hàng</a>
+    <a href="${pageContext.request.contextPath}/reports">📊 Báo cáo</a>
+</div>
         </div>
         
         <div class="content">

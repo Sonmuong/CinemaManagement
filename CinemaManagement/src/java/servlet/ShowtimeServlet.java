@@ -138,19 +138,26 @@ public class ShowtimeServlet extends HttpServlet {
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
-    private void showByDate(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        try {
-            String dateStr = request.getParameter("date");
-            Date date = Date.valueOf(dateStr);
-            List<Showtime> showtimes = showtimeDAO.getShowtimesByDate(date);
-            request.setAttribute("showtimes", showtimes);
-            request.setAttribute("selectedDate", dateStr);
-            request.getRequestDispatcher("/showtimes.jsp").forward(request, response);
-        } catch (Exception e) {
-            response.sendRedirect(request.getContextPath() + "/showtimes");
-        }
+   private void showByDate(HttpServletRequest request, HttpServletResponse response)
+        throws ServletException, IOException {
+    String dateStr = request.getParameter("date");
+    if (dateStr == null || dateStr.trim().isEmpty()) {
+        listShowtimes(request, response);
+        return;
     }
+    try {
+        Date date = Date.valueOf(dateStr.trim());
+        List<Showtime> showtimes = showtimeDAO.getShowtimesByDate(date);
+        request.setAttribute("showtimes", showtimes);
+        request.setAttribute("selectedDate", dateStr.trim());
+        request.getRequestDispatcher("/showtimes.jsp").forward(request, response);
+    } catch (IllegalArgumentException e) {
+        // Ngày không hợp lệ → hiện tất cả
+        request.getSession().setAttribute("message", "❌ Định dạng ngày không hợp lệ!");
+        request.getSession().setAttribute("messageType", "error");
+        response.sendRedirect(request.getContextPath() + "/showtimes");
+    }
+}
 
     private void showByMovie(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {

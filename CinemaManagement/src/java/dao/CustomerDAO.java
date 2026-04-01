@@ -259,4 +259,21 @@ public class CustomerDAO {
             System.out.println("- " + v.getFullName() + ": " + v.getLoyaltyPoints() + " điểm");
         }
     }
+    public boolean deleteCustomer(int customerId) {
+    // Không xóa nếu còn vé Paid
+    String checkSql = "SELECT COUNT(*) FROM Tickets WHERE customer_id = ? AND payment_status = 'Paid'";
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(checkSql)) {
+        ps.setInt(1, customerId);
+        ResultSet rs = ps.executeQuery();
+        if (rs.next() && rs.getInt(1) > 0) return false;
+    } catch (SQLException e) { e.printStackTrace(); return false; }
+
+    String sql = "DELETE FROM Customers WHERE customer_id = ?";
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
+        ps.setInt(1, customerId);
+        return ps.executeUpdate() > 0;
+    } catch (SQLException e) { e.printStackTrace(); return false; }
+}
 }

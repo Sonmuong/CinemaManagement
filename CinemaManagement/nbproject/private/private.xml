@@ -28,6 +28,10 @@
             <file>file:/E:/PRJ/CinemaManagement/web/customers.jsp</file>
             <file>file:/E:/PRJ/CinemaManagement/web/ticket-result.jsp</file>
             <file>file:/E:/PRJ/CinemaManagement/src/java/model/Ticket.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/edit-showtime.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/tickets.jsp</file>
+            <file>file:/E:/PRJ/CinemaManagement/src/java/dao/CustomerDAO.java</file>
+            <file>file:/E:/PRJ/CinemaManagement/web/edit-customer.jsp</file>
         </group>
     </open-files>
 </project-private>
