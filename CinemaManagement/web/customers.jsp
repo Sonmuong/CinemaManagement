@@ -17,7 +17,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1300px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -95,12 +95,16 @@
             white-space: nowrap;
         }
         .btn:hover { background: #5568d3; transform: translateY(-2px); }
-        .btn-success { background: #28a745; }
-        .btn-success:hover { background: #218838; }
+        .btn-success  { background: #28a745; }
+        .btn-success:hover  { background: #218838; }
+        .btn-warning  { background: #e6a817; color: white; }
+        .btn-warning:hover  { background: #c8940f; }
+        .btn-danger   { background: #dc3545; }
+        .btn-danger:hover   { background: #c82333; }
         .btn-secondary { background: #6c757d; }
         .btn-secondary:hover { background: #5a6268; }
+        .btn-sm { padding: 5px 11px; font-size: 0.8em; }
 
-        /* Table */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -108,35 +112,25 @@
             background: white;
         }
         thead { background: #667eea; color: white; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #dee2e6; }
+        th, td { padding: 13px 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
         tbody tr:hover { background: #f8f9fa; }
 
-        /* Sortable headers */
-        th.sortable {
-            cursor: pointer;
-            user-select: none;
-            white-space: nowrap;
-        }
+        th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
         th.sortable:hover { background: #5568d3; }
 
-        .sort-icon {
-            display: inline-block;
-            margin-left: 6px;
-            font-size: 0.85em;
-            opacity: 0.7;
-        }
+        .sort-icon { display: inline-block; margin-left: 6px; font-size: 0.85em; opacity: 0.7; }
         th.sort-active .sort-icon { opacity: 1; }
 
         .vip-badge {
             background: #ffc107;
             color: #333;
-            padding: 5px 15px;
-            border-radius: 15px;
+            padding: 4px 12px;
+            border-radius: 12px;
             font-weight: bold;
-            font-size: 0.85em;
+            font-size: 0.82em;
         }
 
-        .points { color: #667eea; font-weight: bold; font-size: 1.1em; }
+        .points { color: #667eea; font-weight: bold; }
 
         .no-results { text-align: center; padding: 50px; color: #666; font-size: 1.2em; }
 
@@ -163,6 +157,9 @@
             margin-top: 8px;
             margin-bottom: -10px;
         }
+
+        .action-cell { white-space: nowrap; }
+        .action-cell form { display: inline; }
     </style>
 </head>
 <body>
@@ -216,7 +213,6 @@
             <div class="search-box">
                 <form action="customers" method="get" style="display:flex; gap:10px; width:100%;">
                     <input type="hidden" name="action" value="search">
-                    <%-- Giữ sort state khi search --%>
                     <c:if test="${sortBy != null}">
                         <input type="hidden" name="sortBy"  value="${sortBy}">
                         <input type="hidden" name="sortDir" value="${sortDir}">
@@ -244,10 +240,6 @@
             </p>
         </c:if>
 
-        <%--
-            Build base URL để dùng cho sort links.
-            Giữ lại action và keyword nếu đang search/vip.
-        --%>
         <c:set var="baseAction" value="${isVIPOnly ? 'vip' : (keyword != null && !keyword.isEmpty() ? 'search' : 'list')}"/>
 
         <p class="sort-hint">💡 Bấm vào tiêu đề cột để sắp xếp</p>
@@ -257,8 +249,6 @@
                 <table>
                     <thead>
                         <tr>
-                            <%-- Helper: tính icon và nextDir cho mỗi cột --%>
-
                             <%-- Cột ID --%>
                             <c:set var="col" value="id"/>
                             <c:set var="nextDir" value="${sortBy == col && sortDir == 'asc' ? 'desc' : 'asc'}"/>
@@ -284,7 +274,7 @@
                             <th>Số Điện Thoại</th>
                             <th>Email</th>
 
-                            <%-- Cột Điểm Tích Lũy --%>
+                            <%-- Cột Điểm --%>
                             <c:set var="col" value="points"/>
                             <c:set var="nextDir" value="${sortBy == col && sortDir == 'asc' ? 'desc' : 'asc'}"/>
                             <c:set var="icon"    value="${sortBy == col ? (sortDir == 'asc' ? '▲' : '▼') : '⇅'}"/>
@@ -305,6 +295,8 @@
                                     Hạng <span class="sort-icon">${icon}</span>
                                 </a>
                             </th>
+
+                            <th>Hành Động</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -326,6 +318,17 @@
                                             <span style="color:#999;">Thường</span>
                                         </c:otherwise>
                                     </c:choose>
+                                </td>
+                                <td class="action-cell">
+                                    <a href="customers?action=edit&customerId=${customer.customerId}"
+                                       class="btn btn-warning btn-sm">✏️ Sửa</a>
+                                    &nbsp;
+                                    <form action="customers" method="get"
+                                          onsubmit="return confirm('Xóa khách hàng \'${customer.fullName}\'?\nHành động này không thể hoàn tác!')">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="customerId" value="${customer.customerId}">
+                                        <button type="submit" class="btn btn-danger btn-sm">🗑️ Xóa</button>
+                                    </form>
                                 </td>
                             </tr>
                         </c:forEach>

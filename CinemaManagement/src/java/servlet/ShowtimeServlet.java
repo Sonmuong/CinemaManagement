@@ -15,8 +15,8 @@ import java.util.List;
 
 public class ShowtimeServlet extends HttpServlet {
     private ShowtimeDAO showtimeDAO = new ShowtimeDAO();
-    private MovieDAO movieDAO = new MovieDAO();
-    private RoomDAO roomDAO = new RoomDAO();
+    private MovieDAO    movieDAO    = new MovieDAO();
+    private RoomDAO     roomDAO     = new RoomDAO();
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
@@ -33,12 +33,12 @@ public class ShowtimeServlet extends HttpServlet {
         if (action == null) action = "list";
 
         switch (action) {
-            case "list":   listShowtimes(request, response);  break;
-            case "add":    showAddForm(request, response);    break;
-            case "edit":   showEditForm(request, response);   break;
-            case "date":   showByDate(request, response);     break;
-            case "movie":  showByMovie(request, response);    break;
-            default:       listShowtimes(request, response);
+            case "list":  listShowtimes(request, response); break;
+            case "add":   showAddForm(request, response);   break;
+            case "edit":  showEditForm(request, response);  break;
+            case "date":  showByDate(request, response);    break;
+            case "movie": showByMovie(request, response);   break;
+            default:      listShowtimes(request, response);
         }
     }
 
@@ -55,10 +55,10 @@ public class ShowtimeServlet extends HttpServlet {
 
         String action = request.getParameter("action");
         switch (action != null ? action : "") {
-            case "create": createShowtime(request, response);  break;
-            case "cancel": cancelShowtime(request, response);  break;
-            case "delete": deleteShowtime(request, response);  break;
-            case "update": updateShowtime(request, response);  break;
+            case "create": createShowtime(request, response); break;
+            case "cancel": cancelShowtime(request, response); break;
+            case "delete": deleteShowtime(request, response); break;
+            case "update": updateShowtime(request, response); break;
             default:       listShowtimes(request, response);
         }
     }
@@ -78,37 +78,35 @@ public class ShowtimeServlet extends HttpServlet {
     private void showAddForm(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         List<Movie> movies = movieDAO.getActiveMovies();
-        List<Room> rooms = roomDAO.getAllRooms();
+        List<Room>  rooms  = roomDAO.getAllRooms();
         request.setAttribute("movies", movies);
-        request.setAttribute("rooms", rooms);
+        request.setAttribute("rooms",  rooms);
         request.getRequestDispatcher("/add-showtime.jsp").forward(request, response);
     }
 
-    // FIX: Thêm action edit để sửa suất chiếu đã hủy
     private void showEditForm(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String showtimeIdStr = request.getParameter("showtimeId");
         if (showtimeIdStr == null) {
-            response.sendRedirect(request.getContextPath() + "/showtimes");
-            return;
+            response.sendRedirect(request.getContextPath() + "/showtimes"); return;
         }
-        int showtimeId = Integer.parseInt(showtimeIdStr);
+        int showtimeId    = Integer.parseInt(showtimeIdStr);
         Showtime showtime = showtimeDAO.getShowtimeById(showtimeId);
         List<Movie> movies = movieDAO.getAllMovies();
-        List<Room> rooms = roomDAO.getAllRooms();
+        List<Room>  rooms  = roomDAO.getAllRooms();
         request.setAttribute("showtime", showtime);
-        request.setAttribute("movies", movies);
-        request.setAttribute("rooms", rooms);
+        request.setAttribute("movies",   movies);
+        request.setAttribute("rooms",    rooms);
         request.getRequestDispatcher("/edit-showtime.jsp").forward(request, response);
     }
 
     private void createShowtime(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
-            int movieId = Integer.parseInt(request.getParameter("movieId"));
-            int roomId = Integer.parseInt(request.getParameter("roomId"));
-            Date showDate = Date.valueOf(request.getParameter("showDate"));
-            Time showTime = Time.valueOf(request.getParameter("showTime") + ":00");
+            int    movieId    = Integer.parseInt(request.getParameter("movieId"));
+            int    roomId     = Integer.parseInt(request.getParameter("roomId"));
+            Date   showDate   = Date.valueOf(request.getParameter("showDate"));
+            Time   showTime   = Time.valueOf(request.getParameter("showTime") + ":00");
             double ticketPrice = Double.parseDouble(request.getParameter("ticketPrice"));
 
             Showtime showtime = new Showtime();
@@ -120,51 +118,49 @@ public class ShowtimeServlet extends HttpServlet {
             showtime.setStatus("Scheduled");
 
             boolean success = showtimeDAO.addShowtime(showtime);
-
             if (success) {
                 request.getSession().setAttribute("message", "✅ Thêm suất chiếu thành công!");
                 request.getSession().setAttribute("messageType", "success");
             } else {
-                request.getSession().setAttribute("message", "❌ Phòng đã có lịch chiếu khác trong thời gian này! (Cần 30 phút dọn dẹp giữa các suất)");
+                request.getSession().setAttribute("message",
+                    "❌ Phòng đã có lịch chiếu khác trong thời gian này! (Cần 30 phút dọn dẹp giữa các suất)");
                 request.getSession().setAttribute("messageType", "error");
             }
-
         } catch (Exception e) {
             e.printStackTrace();
             request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());
             request.getSession().setAttribute("messageType", "error");
         }
-
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
-   private void showByDate(HttpServletRequest request, HttpServletResponse response)
-        throws ServletException, IOException {
-    String dateStr = request.getParameter("date");
-    if (dateStr == null || dateStr.trim().isEmpty()) {
-        listShowtimes(request, response);
-        return;
+    // Lọc theo ngày — đã fix: kiểm tra null và báo lỗi rõ ràng
+    private void showByDate(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        String dateStr = request.getParameter("date");
+        if (dateStr == null || dateStr.trim().isEmpty()) {
+            listShowtimes(request, response);
+            return;
+        }
+        try {
+            Date date = Date.valueOf(dateStr.trim());
+            List<Showtime> showtimes = showtimeDAO.getShowtimesByDate(date);
+            request.setAttribute("showtimes",    showtimes);
+            request.setAttribute("selectedDate", dateStr.trim());
+            request.getRequestDispatcher("/showtimes.jsp").forward(request, response);
+        } catch (IllegalArgumentException e) {
+            request.getSession().setAttribute("message", "❌ Ngày không hợp lệ: " + dateStr);
+            request.getSession().setAttribute("messageType", "error");
+            response.sendRedirect(request.getContextPath() + "/showtimes");
+        }
     }
-    try {
-        Date date = Date.valueOf(dateStr.trim());
-        List<Showtime> showtimes = showtimeDAO.getShowtimesByDate(date);
-        request.setAttribute("showtimes", showtimes);
-        request.setAttribute("selectedDate", dateStr.trim());
-        request.getRequestDispatcher("/showtimes.jsp").forward(request, response);
-    } catch (IllegalArgumentException e) {
-        // Ngày không hợp lệ → hiện tất cả
-        request.getSession().setAttribute("message", "❌ Định dạng ngày không hợp lệ!");
-        request.getSession().setAttribute("messageType", "error");
-        response.sendRedirect(request.getContextPath() + "/showtimes");
-    }
-}
 
     private void showByMovie(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         int movieId = Integer.parseInt(request.getParameter("movieId"));
         List<Showtime> showtimes = showtimeDAO.getShowtimesByMovie(movieId);
         Movie movie = movieDAO.getMovieById(movieId);
-        request.setAttribute("showtimes", showtimes);
+        request.setAttribute("showtimes",     showtimes);
         request.setAttribute("selectedMovie", movie);
         request.getRequestDispatcher("/showtimes.jsp").forward(request, response);
     }
@@ -173,46 +169,33 @@ public class ShowtimeServlet extends HttpServlet {
             throws ServletException, IOException {
         int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
         boolean success = showtimeDAO.cancelShowtime(showtimeId);
-
-        if (success) {
-            request.getSession().setAttribute("message", "✅ Hủy suất chiếu thành công!");
-            request.getSession().setAttribute("messageType", "success");
-        } else {
-            request.getSession().setAttribute("message", "❌ Không thể hủy suất chiếu!");
-            request.getSession().setAttribute("messageType", "error");
-        }
-
+        request.getSession().setAttribute("message",
+            success ? "✅ Hủy suất chiếu thành công!" : "❌ Không thể hủy suất chiếu!");
+        request.getSession().setAttribute("messageType", success ? "success" : "error");
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
-    // FIX: Thêm action xóa vĩnh viễn suất chiếu đã hủy
     private void deleteShowtime(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
         boolean success = showtimeDAO.deleteShowtime(showtimeId);
-
-        if (success) {
-            request.getSession().setAttribute("message", "🗑️ Đã xóa suất chiếu #" + showtimeId + "!");
-            request.getSession().setAttribute("messageType", "success");
-        } else {
-            request.getSession().setAttribute("message", "❌ Không thể xóa suất chiếu (có thể còn vé liên quan)!");
-            request.getSession().setAttribute("messageType", "error");
-        }
-
+        request.getSession().setAttribute("message",
+            success ? "🗑️ Đã xóa suất chiếu #" + showtimeId + "!"
+                    : "❌ Không thể xóa suất chiếu (có thể còn vé liên quan)!");
+        request.getSession().setAttribute("messageType", success ? "success" : "error");
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
-    // FIX: Thêm action cập nhật suất chiếu
     private void updateShowtime(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
-            int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
-            int movieId = Integer.parseInt(request.getParameter("movieId"));
-            int roomId = Integer.parseInt(request.getParameter("roomId"));
-            Date showDate = Date.valueOf(request.getParameter("showDate"));
-            Time showTime = Time.valueOf(request.getParameter("showTime") + ":00");
+            int    showtimeId  = Integer.parseInt(request.getParameter("showtimeId"));
+            int    movieId     = Integer.parseInt(request.getParameter("movieId"));
+            int    roomId      = Integer.parseInt(request.getParameter("roomId"));
+            Date   showDate    = Date.valueOf(request.getParameter("showDate"));
+            Time   showTime    = Time.valueOf(request.getParameter("showTime") + ":00");
             double ticketPrice = Double.parseDouble(request.getParameter("ticketPrice"));
-            String status = request.getParameter("status");
+            String status      = request.getParameter("status");
 
             Showtime showtime = new Showtime();
             showtime.setShowtimeId(showtimeId);
@@ -224,13 +207,9 @@ public class ShowtimeServlet extends HttpServlet {
             showtime.setStatus(status != null ? status : "Scheduled");
 
             boolean success = showtimeDAO.updateShowtime(showtime);
-            if (success) {
-                request.getSession().setAttribute("message", "✅ Cập nhật suất chiếu thành công!");
-                request.getSession().setAttribute("messageType", "success");
-            } else {
-                request.getSession().setAttribute("message", "❌ Cập nhật thất bại!");
-                request.getSession().setAttribute("messageType", "error");
-            }
+            request.getSession().setAttribute("message",
+                success ? "✅ Cập nhật suất chiếu thành công!" : "❌ Cập nhật thất bại!");
+            request.getSession().setAttribute("messageType", success ? "success" : "error");
         } catch (Exception e) {
             e.printStackTrace();
             request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());

@@ -1,6 +1,7 @@
 package servlet;
 
 import dao.MovieDAO;
+import dao.ShowtimeDAO;
 import model.Movie;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.*;
@@ -10,7 +11,8 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class MovieServlet extends HttpServlet {
-    private MovieDAO movieDAO = new MovieDAO();
+    private MovieDAO    movieDAO    = new MovieDAO();
+    private ShowtimeDAO showtimeDAO = new ShowtimeDAO();
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
@@ -18,7 +20,6 @@ public class MovieServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
-        // Kiểm tra đăng nhập
         if (!isLoggedIn(request)) {
             response.sendRedirect(request.getContextPath() + "/login");
             return;
@@ -28,12 +29,12 @@ public class MovieServlet extends HttpServlet {
         if (action == null) action = "list";
 
         switch (action) {
-            case "list":   listMovies(request, response);   break;
-            case "search": searchMovies(request, response); break;
-            case "add":    showAddForm(request, response);  break;
-            case "edit":   showEditForm(request, response); break;
-            case "toggle": toggleMovieStatus(request, response); break; // FIX: đổi tên từ "delete" -> "toggle"
-            case "delete": toggleMovieStatus(request, response); break; // giữ backward compat
+            case "list":   listMovies(request, response);           break;
+            case "search": searchMovies(request, response);         break;
+            case "add":    showAddForm(request, response);          break;
+            case "edit":   showEditForm(request, response);         break;
+            case "toggle": toggleMovieStatus(request, response);    break;
+            case "delete": toggleMovieStatus(request, response);    break; // backward compat
             default:       listMovies(request, response);
         }
     }
@@ -44,7 +45,6 @@ public class MovieServlet extends HttpServlet {
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
 
-        // Kiểm tra đăng nhập
         if (!isLoggedIn(request)) {
             response.sendRedirect(request.getContextPath() + "/login");
             return;
@@ -63,7 +63,6 @@ public class MovieServlet extends HttpServlet {
         return session != null && session.getAttribute("loggedIn") != null;
     }
 
-    // ── Danh sách phim ───────────────────────────────────────────
     private void listMovies(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         List<Movie> movies = movieDAO.getAllMovies();
@@ -71,7 +70,6 @@ public class MovieServlet extends HttpServlet {
         request.getRequestDispatcher("/movies.jsp").forward(request, response);
     }
 
-    // ── Tìm kiếm ─────────────────────────────────────────────────
     private void searchMovies(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String keyword = request.getParameter("keyword");
@@ -83,7 +81,6 @@ public class MovieServlet extends HttpServlet {
         request.getRequestDispatcher("/movies.jsp").forward(request, response);
     }
 
-    // ── Form thêm phim ────────────────────────────────────────────
     private void showAddForm(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         List<String> allGenres = movieDAO.getAllGenres();
@@ -91,7 +88,6 @@ public class MovieServlet extends HttpServlet {
         request.getRequestDispatcher("/movie-form.jsp").forward(request, response);
     }
 
-    // ── Form sửa phim ─────────────────────────────────────────────
     private void showEditForm(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         int movieId = Integer.parseInt(request.getParameter("movieId"));
@@ -102,21 +98,19 @@ public class MovieServlet extends HttpServlet {
         request.getRequestDispatcher("/movie-form.jsp").forward(request, response);
     }
 
-    // ── Tạo phim mới ─────────────────────────────────────────────
     private void createMovie(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
             Movie movie = extractMovieFromRequest(request);
-
             String[] genreNames = request.getParameterValues("genres");
             List<Integer> genreIds = new ArrayList<>();
             if (genreNames != null) {
                 genreIds = movieDAO.getOrCreateGenreIds(Arrays.asList(genreNames));
             }
-
             boolean success = movieDAO.addMovie(movie, genreIds);
             if (success) {
-                request.getSession().setAttribute("message", "✅ Thêm phim \"" + movie.getMovieName() + "\" thành công!");
+                request.getSession().setAttribute("message",
+                    "✅ Thêm phim \"" + movie.getMovieName() + "\" thành công!");
                 request.getSession().setAttribute("messageType", "success");
             } else {
                 request.getSession().setAttribute("message", "❌ Thêm phim thất bại!");
@@ -130,23 +124,21 @@ public class MovieServlet extends HttpServlet {
         response.sendRedirect(request.getContextPath() + "/movies");
     }
 
-    // ── Cập nhật phim ────────────────────────────────────────────
     private void updateMovie(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
             int movieId = Integer.parseInt(request.getParameter("movieId"));
             Movie movie = extractMovieFromRequest(request);
             movie.setMovieId(movieId);
-
             String[] genreNames = request.getParameterValues("genres");
             List<Integer> genreIds = new ArrayList<>();
             if (genreNames != null) {
                 genreIds = movieDAO.getOrCreateGenreIds(Arrays.asList(genreNames));
             }
-
             boolean success = movieDAO.updateMovieWithGenres(movie, genreIds);
             if (success) {
-                request.getSession().setAttribute("message", "✅ Cập nhật phim \"" + movie.getMovieName() + "\" thành công!");
+                request.getSession().setAttribute("message",
+                    "✅ Cập nhật phim \"" + movie.getMovieName() + "\" thành công!");
                 request.getSession().setAttribute("messageType", "success");
             } else {
                 request.getSession().setAttribute("message", "❌ Cập nhật thất bại!");
@@ -160,8 +152,7 @@ public class MovieServlet extends HttpServlet {
         response.sendRedirect(request.getContextPath() + "/movies");
     }
 
-    // ── Toggle trạng thái phim (Active <-> Inactive) ──────────────
-    // FIX: Đọc trạng thái hiện tại rồi đảo ngược, thay vì luôn set Inactive
+    // Toggle Active <-> Inactive, đồng thời hủy suất chiếu khi ngừng phim
     private void toggleMovieStatus(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
@@ -175,19 +166,28 @@ public class MovieServlet extends HttpServlet {
                 return;
             }
 
-            // Toggle: Active -> Inactive, Inactive -> Active
             String newStatus = "Active".equals(movie.getStatus()) ? "Inactive" : "Active";
             movie.setStatus(newStatus);
 
             boolean success = movieDAO.updateMovie(movie);
             if (success) {
-                String msg = "Active".equals(newStatus)
-                    ? "✅ Đã kích hoạt phim \"" + movie.getMovieName() + "\"!"
-                    : "🚫 Đã ngừng chiếu phim \"" + movie.getMovieName() + "\"!";
+                String msg;
+                if ("Active".equals(newStatus)) {
+                    msg = "✅ Đã kích hoạt phim \"" + movie.getMovieName() + "\"!";
+                } else {
+                    // Tự động hủy tất cả suất Scheduled của phim này
+                    int cancelledCount = showtimeDAO.cancelScheduledShowtimesByMovie(movieId);
+                    msg = "🚫 Đã ngừng chiếu phim \"" + movie.getMovieName() + "\"!";
+                    if (cancelledCount > 0) {
+                        msg += " Đã tự động hủy " + cancelledCount
+                             + " suất chiếu liên quan.";
+                    }
+                }
                 request.getSession().setAttribute("message", msg);
                 request.getSession().setAttribute("messageType", "success");
             } else {
-                request.getSession().setAttribute("message", "❌ Không thể thay đổi trạng thái phim!");
+                request.getSession().setAttribute("message",
+                    "❌ Không thể thay đổi trạng thái phim!");
                 request.getSession().setAttribute("messageType", "error");
             }
         } catch (Exception e) {
@@ -198,7 +198,6 @@ public class MovieServlet extends HttpServlet {
         response.sendRedirect(request.getContextPath() + "/movies");
     }
 
-    // ── Helper: đọc dữ liệu phim từ form ─────────────────────────
     private Movie extractMovieFromRequest(HttpServletRequest request) {
         Movie movie = new Movie();
         movie.setMovieName(request.getParameter("movieName").trim());
