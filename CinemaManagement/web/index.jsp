@@ -77,12 +77,12 @@
             font-size: 0.85em;
         }
 
-        .menu-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 25px;
-            padding: 40px;
-        }
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 25px;
+    padding: 40px;
+}
 
         .menu-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

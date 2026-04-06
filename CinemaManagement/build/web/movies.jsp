@@ -119,7 +119,6 @@
         .btn-danger:hover { background: #c82333; }
         .btn-activate { background: #17a2b8; }
         .btn-activate:hover { background: #138496; }
-        .btn-sm { padding: 6px 12px; font-size: 0.82em; }
 
         .movies-grid {
             display: grid;
@@ -176,7 +175,6 @@
         .info-row:last-of-type { border-bottom: none; }
         .info-label { color: #666; font-weight: 600; }
 
-        /* FIX: Status badge styles */
         .status-badge {
             padding: 4px 12px;
             border-radius: 12px;
@@ -187,13 +185,23 @@
         .status-active   { background: #28a745; color: white; }
         .status-inactive { background: #6c757d; color: white; }
 
+        /* ── FIX: nút trong card phim ── */
         .movie-actions {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 7px;
             margin-top: 14px;
-            flex-wrap: wrap;
         }
-        .movie-actions .btn { flex: 1; text-align: center; min-width: 0; }
+
+        .movie-actions .btn {
+            padding: 8px 10px;
+            font-size: 0.82em;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
 
         .no-results { text-align: center; padding: 50px; color: #666; font-size: 1.2em; }
 
@@ -283,7 +291,6 @@
                                 </div>
                                 <div class="info-row">
                                     <span class="info-label">🔞 Độ tuổi</span>
-                                    <%-- FIX: Hiển thị độ tuổi đúng --%>
                                     <span>
                                         <c:choose>
                                             <c:when test="${movie.ageRestriction == 0}">Mọi lứa tuổi</c:when>
@@ -297,7 +304,6 @@
                                 </div>
                                 <div class="info-row">
                                     <span class="info-label">📊 Trạng thái</span>
-                                    <%-- FIX: Badge hiển thị đúng --%>
                                     <c:choose>
                                         <c:when test="${movie.status == 'Active'}">
                                             <span class="status-badge status-active">🟢 Đang chiếu</span>
@@ -308,29 +314,26 @@
                                     </c:choose>
                                 </div>
 
-                                <%-- Hành động --%>
+                                                <%-- Hành động: grid 2 cột --%>
                                 <div class="movie-actions">
-                                    <%-- Xem lịch chiếu --%>
+
                                     <a href="showtimes?action=movie&movieId=${movie.movieId}"
-                                       class="btn btn-sm">📅 Lịch</a>
+                                       class="btn" style="background:#667eea;">📅 Lịch</a>
 
-                                    <%-- Sửa phim --%>
                                     <a href="movies?action=edit&movieId=${movie.movieId}"
-                                       class="btn btn-sm btn-warning">✏️ Sửa</a>
+                                       class="btn btn-warning">✏️ Sửa</a>
 
-                                    <%-- Lên lịch (chỉ khi đang chiếu) --%>
                                     <c:if test="${movie.status == 'Active'}">
                                         <a href="showtimes?action=add&movieId=${movie.movieId}"
-                                           class="btn btn-sm btn-success">➕ Lịch chiếu</a>
+                                           class="btn btn-success">➕ Lịch chiếu</a>
                                     </c:if>
 
-                                    <%-- FIX: Toggle Active/Inactive - dùng GET với action=toggle --%>
                                     <a href="movies?action=toggle&movieId=${movie.movieId}"
-                                       class="btn btn-sm ${movie.status == 'Active' ? 'btn-danger' : 'btn-activate'}"
-                                       onclick="return confirm('${movie.status == 'Active' ? 'Ngừng chiếu phim này?' : 'Kích hoạt lại phim này?'}')"
-                                       style="flex:1; text-align:center;">
+                                       class="btn ${movie.status == 'Active' ? 'btn-danger' : 'btn-activate'}"
+                                       onclick="return confirm('${movie.status == 'Active' ? 'Ngừng chiếu phim này?' : 'Kích hoạt lại phim này?'}')">
                                         ${movie.status == 'Active' ? '🚫 Ngừng chiếu' : '✅ Kích hoạt'}
                                     </a>
+
                                 </div>
                             </div>
                         </div>

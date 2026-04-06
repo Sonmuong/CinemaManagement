@@ -92,6 +92,14 @@ public class ShowtimeServlet extends HttpServlet {
         }
         int showtimeId    = Integer.parseInt(showtimeIdStr);
         Showtime showtime = showtimeDAO.getShowtimeById(showtimeId);
+
+        if (showtime == null) {
+            request.getSession().setAttribute("message", "❌ Không tìm thấy suất chiếu!");
+            request.getSession().setAttribute("messageType", "error");
+            response.sendRedirect(request.getContextPath() + "/showtimes");
+            return;
+        }
+
         List<Movie> movies = movieDAO.getAllMovies();
         List<Room>  rooms  = roomDAO.getAllRooms();
         request.setAttribute("showtime", showtime);
@@ -134,7 +142,6 @@ public class ShowtimeServlet extends HttpServlet {
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
-    // Lọc theo ngày — đã fix: kiểm tra null và báo lỗi rõ ràng
     private void showByDate(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String dateStr = request.getParameter("date");
@@ -165,27 +172,64 @@ public class ShowtimeServlet extends HttpServlet {
         request.getRequestDispatcher("/showtimes.jsp").forward(request, response);
     }
 
+    /**
+     * Hủy suất chiếu — tự động hủy vé trước, sau đó hủy suất.
+     * Thông báo rõ số vé bị hủy và số tiền hoàn (nếu có).
+     */
     private void cancelShowtime(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
-        boolean success = showtimeDAO.cancelShowtime(showtimeId);
-        request.getSession().setAttribute("message",
-            success ? "✅ Hủy suất chiếu thành công!" : "❌ Không thể hủy suất chiếu!");
-        request.getSession().setAttribute("messageType", success ? "success" : "error");
+        try {
+            int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
+            ShowtimeDAO.CancelShowtimeResult result = showtimeDAO.cancelShowtime(showtimeId);
+
+            if (result.success) {
+                StringBuilder msg = new StringBuilder("✅ Hủy suất chiếu #" + showtimeId + " thành công!");
+                if (result.ticketsCancelled > 0) {
+                    msg.append(" Đã hủy ").append(result.ticketsCancelled).append(" vé liên quan.");
+                    if (result.ticketsRefunded > 0) {
+                        String refundStr = String.format("%,.0f", result.totalRefundAmount).replace(",", ".");
+                        msg.append(" Cần hoàn tiền cho ")
+                           .append(result.ticketsRefunded)
+                           .append(" vé: ").append(refundStr).append(" đ (80% giá vé).");
+                    } else {
+                        msg.append(" Không hoàn tiền (chiếu trong vòng 2 giờ).");
+                    }
+                }
+                request.getSession().setAttribute("message", msg.toString());
+                request.getSession().setAttribute("messageType", "success");
+            } else {
+                request.getSession().setAttribute("message", "❌ Không thể hủy suất chiếu! Vui lòng thử lại.");
+                request.getSession().setAttribute("messageType", "error");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());
+            request.getSession().setAttribute("messageType", "error");
+        }
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
     private void deleteShowtime(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
-        boolean success = showtimeDAO.deleteShowtime(showtimeId);
-        request.getSession().setAttribute("message",
-            success ? "🗑️ Đã xóa suất chiếu #" + showtimeId + "!"
-                    : "❌ Không thể xóa suất chiếu (có thể còn vé liên quan)!");
-        request.getSession().setAttribute("messageType", success ? "success" : "error");
+        try {
+            int showtimeId = Integer.parseInt(request.getParameter("showtimeId"));
+            boolean success = showtimeDAO.deleteShowtime(showtimeId);
+            request.getSession().setAttribute("message",
+                success ? "🗑️ Đã xóa suất chiếu #" + showtimeId + "!"
+                        : "❌ Không thể xóa suất chiếu (còn vé đã thanh toán chưa được hủy)!");
+            request.getSession().setAttribute("messageType", success ? "success" : "error");
+        } catch (Exception e) {
+            e.printStackTrace();
+            request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());
+            request.getSession().setAttribute("messageType", "error");
+        }
         response.sendRedirect(request.getContextPath() + "/showtimes");
     }
 
+    /**
+     * Kích hoạt lại suất chiếu đã hủy.
+     * Kiểm tra phim có đang Active không trước khi cho kích hoạt.
+     */
     private void updateShowtime(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         try {
@@ -206,10 +250,41 @@ public class ShowtimeServlet extends HttpServlet {
             showtime.setTicketPrice(ticketPrice);
             showtime.setStatus(status != null ? status : "Scheduled");
 
-            boolean success = showtimeDAO.updateShowtime(showtime);
-            request.getSession().setAttribute("message",
-                success ? "✅ Cập nhật suất chiếu thành công!" : "❌ Cập nhật thất bại!");
-            request.getSession().setAttribute("messageType", success ? "success" : "error");
+            // Nếu đang kích hoạt lại (status = Scheduled), kiểm tra phim
+            if ("Scheduled".equals(showtime.getStatus())) {
+                String activateResult = showtimeDAO.activateShowtime(showtime);
+                switch (activateResult) {
+                    case "OK":
+                        request.getSession().setAttribute("message",
+                            "✅ Kích hoạt suất chiếu #" + showtimeId + " thành công!");
+                        request.getSession().setAttribute("messageType", "success");
+                        break;
+                    case "ERROR_MOVIE_INACTIVE":
+                        // Lấy tên phim để thông báo rõ hơn
+                        Movie movie = movieDAO.getMovieById(movieId);
+                        String movieName = movie != null ? movie.getMovieName() : "ID " + movieId;
+                        request.getSession().setAttribute("message",
+                            "❌ Không thể kích hoạt! Phim \"" + movieName + "\" hiện đang NGỪNG CHIẾU. " +
+                            "Vui lòng kích hoạt lại phim trước, sau đó mới kích hoạt suất chiếu này.");
+                        request.getSession().setAttribute("messageType", "error");
+                        break;
+                    case "ERROR_MOVIE_NOT_FOUND":
+                        request.getSession().setAttribute("message",
+                            "❌ Không tìm thấy phim! Vui lòng kiểm tra lại.");
+                        request.getSession().setAttribute("messageType", "error");
+                        break;
+                    default:
+                        request.getSession().setAttribute("message",
+                            "❌ Kích hoạt thất bại! Vui lòng thử lại.");
+                        request.getSession().setAttribute("messageType", "error");
+                }
+            } else {
+                // Update thông thường (không phải kích hoạt)
+                boolean success = showtimeDAO.updateShowtime(showtime);
+                request.getSession().setAttribute("message",
+                    success ? "✅ Cập nhật suất chiếu thành công!" : "❌ Cập nhật thất bại!");
+                request.getSession().setAttribute("messageType", success ? "success" : "error");
+            }
         } catch (Exception e) {
             e.printStackTrace();
             request.getSession().setAttribute("message", "❌ Lỗi: " + e.getMessage());

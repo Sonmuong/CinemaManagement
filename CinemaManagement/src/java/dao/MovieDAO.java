@@ -105,7 +105,6 @@ public class MovieDAO {
             conn = DBConnection.getConnection();
             conn.setAutoCommit(false);
 
-            // Cập nhật thông tin phim
             String sql = "UPDATE Movies SET movie_name=?, duration=?, country=?, release_year=?, " +
                          "age_restriction=?, director=?, main_actors=?, status=? WHERE movie_id=?";
             PreparedStatement ps = conn.prepareStatement(sql);
@@ -187,34 +186,53 @@ public class MovieDAO {
         return genres;
     }
 
-    // ── Lấy hoặc tạo genre_id theo tên ───────────────────────────
+    /**
+     * Lấy hoặc tạo genre_id theo tên thể loại.
+     * Dùng một connection duy nhất để tránh race condition.
+     * Dùng MERGE (SQL Server) để INSERT IF NOT EXISTS an toàn.
+     */
     public List<Integer> getOrCreateGenreIds(List<String> genreNames) {
         List<Integer> ids = new ArrayList<>();
-        for (String name : genreNames) {
-            name = name.trim();
-            if (name.isEmpty()) continue;
+        if (genreNames == null || genreNames.isEmpty()) return ids;
 
-            // Thử tìm
-            String selectSql = "SELECT genre_id FROM Genres WHERE genre_name = ?";
-            try (Connection conn = DBConnection.getConnection();
-                 PreparedStatement ps = conn.prepareStatement(selectSql)) {
-                ps.setString(1, name);
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    ids.add(rs.getInt("genre_id"));
-                    continue;
+        Connection conn = null;
+        try {
+            conn = DBConnection.getConnection();
+            conn.setAutoCommit(false);
+
+            for (String rawName : genreNames) {
+                String name = rawName == null ? "" : rawName.trim();
+                if (name.isEmpty()) continue;
+
+                // MERGE: INSERT nếu chưa có, không làm gì nếu đã có
+                // Sau đó SELECT để lấy ID
+                String mergeSql =
+                    "MERGE INTO Genres AS target " +
+                    "USING (SELECT ? AS genre_name) AS src ON target.genre_name = src.genre_name " +
+                    "WHEN NOT MATCHED THEN INSERT (genre_name) VALUES (src.genre_name);";
+
+                try (PreparedStatement mergePs = conn.prepareStatement(mergeSql)) {
+                    mergePs.setString(1, name);
+                    mergePs.executeUpdate();
                 }
-            } catch (SQLException e) { e.printStackTrace(); }
 
-            // Nếu chưa có thì tạo mới
-            String insertSql = "INSERT INTO Genres (genre_name) VALUES (?)";
-            try (Connection conn = DBConnection.getConnection();
-                 PreparedStatement ps = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
-                ps.setString(1, name);
-                ps.executeUpdate();
-                ResultSet keys = ps.getGeneratedKeys();
-                if (keys.next()) ids.add(keys.getInt(1));
-            } catch (SQLException e) { e.printStackTrace(); }
+                // Lấy ID (đã chắc chắn tồn tại sau MERGE)
+                String selectSql = "SELECT genre_id FROM Genres WHERE genre_name = ?";
+                try (PreparedStatement selectPs = conn.prepareStatement(selectSql)) {
+                    selectPs.setString(1, name);
+                    ResultSet rs = selectPs.executeQuery();
+                    if (rs.next()) {
+                        ids.add(rs.getInt("genre_id"));
+                    }
+                }
+            }
+
+            conn.commit();
+        } catch (SQLException e) {
+            rollback(conn);
+            e.printStackTrace();
+        } finally {
+            restoreAutoCommit(conn);
         }
         return ids;
     }

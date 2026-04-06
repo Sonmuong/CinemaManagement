@@ -79,8 +79,10 @@
             border-radius: 8px;
             background: #fafafa;
         }
+
+        /* FIX: dùng span thay vì label để tránh double-toggle */
         .genre-item {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 6px;
             background: white;
@@ -90,6 +92,7 @@
             cursor: pointer;
             transition: all 0.2s;
             font-size: 0.9em;
+            user-select: none;
         }
         .genre-item:hover { border-color: #667eea; }
         .genre-item input[type=checkbox] { display: none; }
@@ -111,7 +114,9 @@
             border: 2px solid #dee2e6;
             border-radius: 8px;
             font-size: 0.9em;
+            outline: none;
         }
+        .custom-genre-row input:focus { border-color: #667eea; }
         .btn-add-genre {
             padding: 8px 16px;
             background: #667eea;
@@ -244,6 +249,7 @@
 
             <div class="form-group">
                 <label>Chọn thể loại (có thể chọn nhiều)</label>
+                <%-- FIX: dùng div.genre-item + onclick trực tiếp thay vì label bọc checkbox --%>
                 <div class="genre-grid" id="genreGrid">
                     <c:forEach var="genre" items="${allGenres}">
                         <c:set var="isChecked" value="false"/>
@@ -254,18 +260,18 @@
                                 </c:if>
                             </c:forEach>
                         </c:if>
-                        <label class="genre-item ${isChecked ? 'checked' : ''}"
-                               onclick="toggleGenre(this)">
+                        <div class="genre-item ${isChecked ? 'checked' : ''}" onclick="toggleGenre(this)">
                             <input type="checkbox" name="genres" value="${genre}"
                                    ${isChecked ? 'checked' : ''}>
                             ${genre}
-                        </label>
+                        </div>
                     </c:forEach>
                 </div>
 
                 <%-- Thêm thể loại mới chưa có trong DB --%>
                 <div class="custom-genre-row">
-                    <input type="text" id="newGenreInput" placeholder="Thêm thể loại mới...">
+                    <input type="text" id="newGenreInput" placeholder="Thêm thể loại mới..."
+                           maxlength="100">
                     <button type="button" class="btn-add-genre" onclick="addCustomGenre()">
                         ➕ Thêm
                     </button>
@@ -305,41 +311,73 @@
 </div>
 
 <script>
-    // Toggle checkbox style cho thể loại
-    function toggleGenre(label) {
-        const cb = label.querySelector('input[type=checkbox]');
+    /**
+     * FIX 1: Dùng div.genre-item thay vì label bọc checkbox.
+     * Khi dùng <label> bao checkbox, click vào label sẽ:
+     *   1. Trigger onclick của label (toggle checkbox bằng JS)
+     *   2. Browser tự toggle checkbox một lần nữa (vì label liên kết với checkbox)
+     * → Kết quả: checkbox bị toggle 2 lần = không thay đổi gì.
+     * Dùng div + onclick thì chỉ có bước 1, không có bước 2.
+     */
+    function toggleGenre(el) {
+        const cb = el.querySelector('input[type=checkbox]');
         cb.checked = !cb.checked;
-        label.classList.toggle('checked', cb.checked);
+        el.classList.toggle('checked', cb.checked);
     }
 
-    // Thêm thể loại mới vào grid
+    /**
+     * FIX 2: Không dùng template literal ${name} trong JSP.
+     * JSP EL engine sẽ interpret ${name} trước khi gửi về browser,
+     * render thành rỗng vì 'name' không phải EL variable.
+     * Dùng string concatenation thông thường thay thế.
+     */
     function addCustomGenre() {
-        const input = document.getElementById('newGenreInput');
-        const name  = input.value.trim();
-        if (!name) { alert('Vui lòng nhập tên thể loại!'); return; }
+        var input = document.getElementById('newGenreInput');
+        var name  = input.value.trim();
 
-        // Kiểm tra trùng
-        const existing = document.querySelectorAll('#genreGrid input[type=checkbox]');
-        for (const cb of existing) {
-            if (cb.value.toLowerCase() === name.toLowerCase()) {
-                alert('Thể loại này đã tồn tại!');
+        if (!name) {
+            alert('Vui lòng nhập tên thể loại!');
+            return;
+        }
+
+        // Kiểm tra trùng (không phân biệt hoa thường)
+        var existing = document.querySelectorAll('#genreGrid input[type=checkbox]');
+        for (var i = 0; i < existing.length; i++) {
+            if (existing[i].value.toLowerCase() === name.toLowerCase()) {
+                alert('Thể loại "' + name + '" đã tồn tại!');
                 input.value = '';
                 return;
             }
         }
 
-        // Tạo label mới
-        const label = document.createElement('label');
-        label.className = 'genre-item checked';
-        label.onclick = function() { toggleGenre(this); };
-        label.innerHTML = `<input type="checkbox" name="genres" value="${name}" checked>${name}`;
-        document.getElementById('genreGrid').appendChild(label);
+        // Tạo div mới — KHÔNG dùng template literal 
+        // vì JSP sẽ hiểu ${name} là EL expression và render ra rỗng
+        var div = document.createElement('div');
+        div.className = 'genre-item checked';
+        div.onclick = function() { toggleGenre(this); };
+
+        var cb = document.createElement('input');
+        cb.type    = 'checkbox';
+        cb.name    = 'genres';
+        cb.value   = name;   // gán trực tiếp qua JS property, không qua innerHTML
+        cb.checked = true;
+
+        var text = document.createTextNode(name);
+
+        div.appendChild(cb);
+        div.appendChild(text);
+
+        document.getElementById('genreGrid').appendChild(div);
         input.value = '';
+        input.focus();
     }
 
     // Cho phép nhấn Enter trong ô nhập thể loại
     document.getElementById('newGenreInput').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); addCustomGenre(); }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomGenre();
+        }
     });
 </script>
 </body>
